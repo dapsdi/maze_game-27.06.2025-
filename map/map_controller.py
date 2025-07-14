@@ -27,13 +27,14 @@ class MapController:
         )
         #генеруємо глобальний лабіринт між секторами; видаляємо стіни для створення проходів
         self.generate_full_maze()
+
         #додаємо точки входу та сундуки у кожен сектор після того, як визначені проходи між секторами
         for x in range(map_width):
             for y in range(map_height):
                 entries = [] #тимчасовий список для точок входу у сектор
                 for direction, is_wall in self.grid[x][y]['walls'].items(): #перебираємо всі напрямки стін
                     if not is_wall: #якщо стіна відсутня, створюємо точку входу
-                        offset = random.randint(2, 6) #offset визначає зсув отвору на краю сектора
+                        offset = random.randint(entry_offset_min, entry_offset_max) #offset визначає зсув отвору на краю сектора
                         entries.append((direction, offset)) #додаємо точку входу у список
                         self.apply_entry_point(self.grid[x][y]['tiles'], direction, offset) #вирізаємо отвір у локальному лабіринті
                 self.grid[x][y]['entry_points'] = entries #зберігаємо точки входу у секторі
@@ -60,12 +61,16 @@ class MapController:
         size = len(tiles) #size — розмір лабіринту (кількість тайлів по одній стороні)
         if direction == 'top': #якщо напрямок "верх", робимо прохід у верхньому рядку
             tiles[0][off] = 0
+            tiles[1][off] = 0 #додаємо ще один прохідний тайл під отвором, щоб уникнути застрягання
         elif direction == 'bottom': #якщо напрямок "низ", робимо прохід у нижньому рядку
             tiles[size-1][off] = 0
+            tiles[size-2][off] = 0 #додаємо ще один прохідний тайл над отвором, щоб уникнути застрягання
         elif direction == 'left': #якщо напрямок "ліворуч", робимо прохід у першому стовпці
             tiles[off][0] = 0
+            tiles[off][1] = 0 #додаємо ще один прохідний тайл праворуч від отвору, щоб уникнути застрягання
         elif direction == 'right': #якщо напрямок "праворуч", робимо прохід у останньому стовпці
             tiles[off][size-1] = 0
+            tiles[off][size-2] = 0 #додаємо ще один прохідний тайл ліворуч від отвору, щоб уникнути застрягання
 
     def place_chests(self, tiles):
         #розміщує до двох сундуків у випадкових прохідних тайлах локального лабіринту tiles
@@ -80,7 +85,7 @@ class MapController:
             if val == 0
         ]
         chests = [] #список для сундуків
-        for _ in range(2): #максимум два сундуки
+        for _ in range(max_chests_per_sector): #максимум два сундуки
             if not free_tiles: #якщо немає вільних тайлів, завершуємо
                 break
             cx, ry = random.choice(free_tiles) #вибираємо випадковий прохідний тайл
@@ -95,7 +100,7 @@ class MapController:
         stack = [] #стек для збереження шляху
         total = map_width * map_height #total — загальна кількість секторів
         visited = 1 #visited — кількість відвіданих секторів
-        cx = random.randrange(map_width) #cx — початкова координата x
+        cx = random.randrange(map_width) #cx — початкова координата x; randrange - вибирає випадкове число від 0 до map_width-1
         cy = random.randrange(map_height) #cy — початкова координата y
         self.grid[cx][cy]['visited'] = True #позначаємо стартовий сектор як відвіданий
         while visited < total: #поки не відвідані всі сектори
@@ -109,7 +114,21 @@ class MapController:
                 visited += 1 #збільшуємо лічильник відвіданих секторів
             else: #якщо немає невідвіданих сусідів
                 cx, cy = stack.pop() #повертаємося назад по стеку
-        self.add_cycles(40) #додаємо додаткові проходи для ускладнення лабіринту
+        self.add_cycles(global_cycle_count) #додаємо додаткові проходи для ускладнення лабіринту
+
+    def get_safe_transition_point(self, sector_pos):
+        tiles = self.grid[sector_pos[0]][sector_pos[1]]['tiles'] #отримуємо локальний лабіринт сектора
+        tile_w = sector_size // tile_grid_size #ширина одного тайла у пікселях 
+                                               #весь сектор (квадрат) має розмір sector_size × sector_size пікселів
+                                               #він поділений на 9×9 тайлів
+                                               #ширина одного тайлу = sector_size // 9
+                                               #висота одного тайлу = sector_size // 9 (оскільки квадрат)
+        for y in range(tile_grid_size): #перебираємо всі рядки тайлів
+            for x in range(tile_grid_size): #перебираємо всі стовпці тайлів
+                if tiles[y][x] == 0: #якщо тайл прохідний (0)
+                    return (x * tile_w + tile_w // 2,  #повертаємо координати центру тайла
+                            y * tile_w + tile_w // 2) #плюс половину ширини тайла, щоб отримати центр
+
 
     def add_cycles(self, count):
         #додає count додаткових проходів між сусідніми секторами, щоб зробити лабіринт менш лінійним

@@ -17,8 +17,10 @@ class Game:
         self.font = pygame.font.SysFont(None, 36)
         self.button_font = pygame.font.SysFont(None, 28)
 
-        self.start_button = pygame.Rect(300, 720, 200, 50)
-        self.settings_button = pygame.Rect(750, 10, 40, 40)  # невидима кнопка
+        self.yes_button = pygame.Rect(280, 750, 100, 50) 
+        self.no_button = pygame.Rect(450, 750, 100, 50)
+        self.settings_button = pygame.Rect(750, 10, 40, 40)  #невидима кнопка налаштувань
+        
         self.in_game = False
         self.in_settings = False
 
@@ -43,11 +45,13 @@ class Game:
 
                 if not self.in_game:
                     if event.type == pygame.MOUSEBUTTONDOWN:
-                        if self.start_button.collidepoint(event.pos):
+                        if self.yes_button.collidepoint(event.pos):
                             self.in_game = True
                             self.full_screen = False
                             self.screen = pygame.display.set_mode((sector_size, sector_size))
                             pygame.display.set_caption(title)
+                        elif self.no_button.collidepoint(event.pos):
+                            pygame.quit(); return #вихід з гри 
                         elif self.settings_button.collidepoint(event.pos):
                             self.in_settings = not self.in_settings
 
@@ -87,8 +91,13 @@ class Game:
             pygame.display.flip()
 
     def draw_placeholder(self):
-        self.screen.blit(self.start_image, (0, 0))
-        draw_button(self.screen, self.start_button, "Почати гру", self.button_font)
+        self.screen.blit(self.start_image, (0,0))
+        #малюємо тільки текст кнопок без фонового прямокутника
+        yes_txt = self.font.render("yes", True, colors["WHITE"])
+        no_txt  = self.font.render("no",  True, colors["WHITE"])
+        self.screen.blit(yes_txt,  (self.yes_button.x+20, self.yes_button.y+10))
+        self.screen.blit(no_txt,   (self.no_button.x+25,  self.no_button.y+10))
+        #кнопка налаштувань (невидима)
         if self.in_settings:
             self.settings_menu.draw(self.screen)
         pygame.display.flip()
@@ -117,3 +126,5 @@ class Game:
 
         if transitioned:
             self.player.sector = (sector_x, sector_y)
+            x, y = self.map.controller.get_safe_transition_point((sector_x, sector_y))
+            self.player.rect.center = (x, y)
