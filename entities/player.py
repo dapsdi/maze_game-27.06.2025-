@@ -1,63 +1,56 @@
-#entities/player.py#
+#entities/player.py
 import pygame
-from settings.constants import *
+from entities.animation_manager import AnimationManager
+import settings.constants as const
 
-class Player:
-    def __init__(self):
-        #гравець стартує у секторі (0,0) на тайлі (1,1), який завжди прохідний
-        self.sector = (0, 0)
-        self.size = 30
-        self.color = (0, 100, 255)
-
-        #координати тайла (1,1) і його центр
-        tile_grid_size = 9
-        tile_size = sector_size // tile_grid_size
-        spawn_x = tile_size * 1 + tile_size // 2
-        spawn_y = tile_size * 1 + tile_size // 2
-
-        #спавн гравця в центрі прохідного тайла
-        self.rect = pygame.Rect(
-            spawn_x - self.size // 2,
-            spawn_y - self.size // 2,
-            self.size,
-            self.size
-        )
+class Player(pygame.sprite.Sprite):
+    def __init__(self, start_sector=(0,0)):
+        super().__init__()
+        self.sector = start_sector
         self.speed = 4
 
+        #ініціалізація менеджера анімацій
+        self.anim = AnimationManager("animations/goblin")
+
+        #початкові координати
+        w, h = const.tile_px, const.tile_px
+        spawn_x = const.tile_px + const.tile_px//2 - w//2
+        spawn_y = const.tile_px + const.tile_px//2 - h//2
+        self.rect = pygame.Rect(spawn_x, spawn_y, w, h)
+
+        self.state = 'idle'
+        self.direction = 'down'
+
     def get_sector(self):
-        #повертає поточний сектор у вигляді (x,y)
         return self.sector
 
-    def move(self, keys, walls):
-        #перевіряє клавіші і переміщує гравця, уникаючи зіткнень зі стінами
+    def update(self, dt, walls):
+        keys = pygame.key.get_pressed()
         dx = dy = 0
-        if keys[pygame.K_LEFT]: dx = -self.speed
-        if keys[pygame.K_RIGHT]: dx = self.speed
-        if keys[pygame.K_UP]: dy = -self.speed
-        if keys[pygame.K_DOWN]: dy = self.speed
 
-        #рухаємо по осі x
+        if keys[pygame.K_a]: dx = -self.speed; self.direction = 'left'
+        elif keys[pygame.K_d]: dx = self.speed; self.direction = 'right'
+        if keys[pygame.K_w]: dy = -self.speed; self.direction = 'up'
+        elif keys[pygame.K_s]: dy = self.speed; self.direction = 'down'
+
+        #рух + колізії
         self.rect.x += dx
         for wall in walls:
             if self.rect.colliderect(wall):
                 if dx > 0: self.rect.right = wall.left
                 if dx < 0: self.rect.left = wall.right
 
-        #рухаємо по осі y
         self.rect.y += dy
         for wall in walls:
             if self.rect.colliderect(wall):
                 if dy > 0: self.rect.bottom = wall.top
                 if dy < 0: self.rect.top = wall.bottom
 
-    def check_collision(self, dx, dy, walls, tile_colliders):
-        #перевіряє зіткнення з усіма стінами сектора
-        future_rect = self.rect.move(dx, dy)
-        for wall in walls + tile_colliders:
-            if future_rect.colliderect(wall):
-                return True
-        return False
+        #визначення стану
+        self.state = 'idle' if dx == 0 and dy == 0 else 'walk'
+
+        #оновлення анімації
+        self.anim.update(dt, self.state, self.direction)
 
     def draw(self, screen):
-        #малює гравця у секторі
-        pygame.draw.rect(screen, self.color, self.rect)
+        screen.blit(self.anim.get_image(), self.rect)

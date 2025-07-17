@@ -1,130 +1,56 @@
-#core/game.py#
+#core/game.py
 import pygame
-from settings.constants import *
+import settings.constants as const
+from map.map_controller import MapController
 from entities.player import Player
-from map.map import GameMap
-from ui.button import draw_button
-from ui.colors import colors
-from ui.settings_menu import SettingsMenu
+from core.camera import Camera
+from ui.start_screen import show_start_screen
 
 class Game:
     def __init__(self):
-        self.full_screen = True
-        self.screen = pygame.display.set_mode((800, 800))
-        pygame.display.set_caption(title)
+        pygame.init()
+        pygame.display.set_caption(const.title)
 
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont(None, 36)
-        self.button_font = pygame.font.SysFont(None, 28)
+        # відкриваємо вікно фіксованого розміру
+        self.screen = pygame.display.set_mode((const.window_width, const.window_height))
 
-        self.yes_button = pygame.Rect(280, 750, 100, 50) 
-        self.no_button = pygame.Rect(450, 750, 100, 50)
-        self.settings_button = pygame.Rect(750, 10, 40, 40)  #невидима кнопка налаштувань
-        
-        self.in_game = False
-        self.in_settings = False
+        # обчислюємо розмір тайлу і сектора
+        const.tile_px     = min(const.window_width, const.window_height) // const.tile_grid_size
+        const.sector_size = const.tile_px * const.tile_grid_size
 
-        self.player = Player()
-        self.map = GameMap()
-        self.settings_menu = SettingsMenu()
+        # ініціалізуємо карту, гравця, камеру
+        self.map_controller = MapController()
+        self.player         = Player()
+        self.camera         = Camera()
+        self.clock          = pygame.time.Clock()
 
-        self.start_image = pygame.image.load("pictures/start_screen.png").convert()
-        self.start_image = pygame.transform.scale(self.start_image, (800, 800))
-
-        self.pixel_scale = 6
-        low_res = sector_size // self.pixel_scale
-        self.buffer = pygame.Surface((low_res, low_res))
+        # показуємо стартовий екран із двома кнопками
+        show_start_screen(self.screen)
 
     def run(self):
         running = True
         while running:
-            self.clock.tick(fps)
+            dt = self.clock.tick(const.fps) / 1000
+
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if event.type == pygame.QUIT or \
+                  (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     running = False
 
-                if not self.in_game:
-                    if event.type == pygame.MOUSEBUTTONDOWN:
-                        if self.yes_button.collidepoint(event.pos):
-                            self.in_game = True
-                            self.full_screen = False
-                            self.screen = pygame.display.set_mode((sector_size, sector_size))
-                            pygame.display.set_caption(title)
-                        elif self.no_button.collidepoint(event.pos):
-                            pygame.quit(); return #вихід з гри 
-                        elif self.settings_button.collidepoint(event.pos):
-                            self.in_settings = not self.in_settings
+            # отримуємо глобальні стіни поточного сектора
+            sx, sy = self.player.get_sector()
+            global_walls  = self.map_controller.get_sector_walls((sx, sy))
+            tile_walls   = self.map_controller.get_tile_colliders((sx, sy))
+            all_walls = global_walls + tile_walls
 
-            if not self.in_game:
-                self.draw_placeholder()
-                continue
+            # оновлюємо
+            self.player.update(dt, all_walls)
+            self.camera.update(self.player)
 
-            keys = pygame.key.get_pressed()
-            sector = self.player.get_sector()
-            walls = self.map.get_walls(sector)
-            tile_colliders = self.map.get_tile_colliders(sector)
-            chests = self.map.get_chests(sector)
-
-            self.player.move(keys, walls + tile_colliders)
-
-            if keys[pygame.K_f]:
-                self.map.try_collect_chest(sector, self.player.rect)
-
-            self.handle_sector_transition()
-
-            #малюємо весь кадр на buffer
-            #у buffer розміром low_res x low_res
-            self.buffer.fill(colors["BLACK"])
-            #малюємо сектор
-            #але draw_sector очікує full-res розміри, тому потрібно масштабувати координати всередині buffer:
-            #найпростіше намалювати на full_surface а потім up/down scale:
-            full = pygame.Surface((sector_size, sector_size))
-            full.fill(colors["BLACK"])
-            self.map.draw_current_sector(full, sector)
-            self.player.draw(full)
-            #downscale -> upscale
-            small = pygame.transform.scale(full, self.buffer.get_size())
-            pixelated = pygame.transform.scale(small, (sector_size, sector_size))
-            #переносимо на екран
-            self.screen.blit(pixelated, (0, 0))
+            # малюємо
+            self.map_controller.draw_sector(self.screen, (sx, sy))
+            self.player.draw(self.screen)
 
             pygame.display.flip()
 
-    def draw_placeholder(self):
-        self.screen.blit(self.start_image, (0,0))
-        #малюємо тільки текст кнопок без фонового прямокутника
-        yes_txt = self.font.render("yes", True, colors["WHITE"])
-        no_txt  = self.font.render("no",  True, colors["WHITE"])
-        self.screen.blit(yes_txt,  (self.yes_button.x+20, self.yes_button.y+10))
-        self.screen.blit(no_txt,   (self.no_button.x+25,  self.no_button.y+10))
-        #кнопка налаштувань (невидима)
-        if self.in_settings:
-            self.settings_menu.draw(self.screen)
-        pygame.display.flip()
-
-    def handle_sector_transition(self):
-        sector_x, sector_y = self.player.get_sector()
-        transitioned = False
-
-        if self.player.rect.left < 0 and sector_x > 0:
-            sector_x -= 1
-            self.player.rect.right = sector_size
-            transitioned = True
-        elif self.player.rect.right > sector_size and sector_x < map_width - 1:
-            sector_x += 1
-            self.player.rect.left = 0
-            transitioned = True
-
-        if self.player.rect.top < 0 and sector_y > 0:
-            sector_y -= 1
-            self.player.rect.bottom = sector_size
-            transitioned = True
-        elif self.player.rect.bottom > sector_size and sector_y < map_height - 1:
-            sector_y += 1
-            self.player.rect.top = 0
-            transitioned = True
-
-        if transitioned:
-            self.player.sector = (sector_x, sector_y)
-            x, y = self.map.controller.get_safe_transition_point((sector_x, sector_y))
-            self.player.rect.center = (x, y)
+        pygame.quit()

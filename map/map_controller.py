@@ -1,12 +1,12 @@
 # map/map_controller.py
 import pygame
 import random
-from settings.constants import *
+import settings.constants as const #імпортуємо константи з модуля settings.constants
 from ui.colors import colors
 
 class MapController:
     def __init__(self):
-        #створюємо двовимірний список grid, де кожен елемент — це словник з даними про сектор; map_width і map_height визначають розміри лабіринту
+        #створюємо двовимірний список grid, де кожен елемент — це словник з даними про сектор; const.map_width і const.map_height визначають розміри лабіринту
         self.grid = [
             [
                 {
@@ -16,25 +16,25 @@ class MapController:
                     'chests': [], #список сундуків у секторі; заповнюється після генерації проходів
                     'entry_points': [] #список точок входу у сектор; заповнюється після видалення стін
                 }
-                for _ in range(map_height)
+                for _ in range(const.map_height)
             ]
-            for _ in range(map_width)
+            for _ in range(const.map_width)
         ]
-        #генеруємо випадкову позицію фінального скарбу; random.randrange(map_width) та random.randrange(map_height) вибирають координати у межах лабіринту
+        #генеруємо випадкову позицію фінального скарбу; random.randrange(const.map_width) та random.randrange(const.map_height) вибирають координати у межах лабіринту
         self.treasure_pos = (
-            random.randrange(map_width),
-            random.randrange(map_height)
+            random.randrange(const.map_width),
+            random.randrange(const.map_height)
         )
         #генеруємо глобальний лабіринт між секторами; видаляємо стіни для створення проходів
         self.generate_full_maze()
 
         #додаємо точки входу та сундуки у кожен сектор після того, як визначені проходи між секторами
-        for x in range(map_width):
-            for y in range(map_height):
+        for x in range(const.map_width):
+            for y in range(const.map_height):
                 entries = [] #тимчасовий список для точок входу у сектор
                 for direction, is_wall in self.grid[x][y]['walls'].items(): #перебираємо всі напрямки стін
                     if not is_wall: #якщо стіна відсутня, створюємо точку входу
-                        offset = random.randint(entry_offset_min, entry_offset_max) #offset визначає зсув отвору на краю сектора
+                        offset = random.randint(const.entry_offset_min, const.entry_offset_max) #offset визначає зсув отвору на краю сектора
                         entries.append((direction, offset)) #додаємо точку входу у список
                         self.apply_entry_point(self.grid[x][y]['tiles'], direction, offset) #вирізаємо отвір у локальному лабіринті
                 self.grid[x][y]['entry_points'] = entries #зберігаємо точки входу у секторі
@@ -76,8 +76,8 @@ class MapController:
         #розміщує до двох сундуків у випадкових прохідних тайлах локального лабіринту tiles
         w = len(tiles[0]) #w — ширина лабіринту
         h = len(tiles) #h — висота лабіринту
-        tw = sector_size // w #tw — ширина одного тайла у пікселях
-        th = sector_size // h #th — висота одного тайла у пікселях
+        tw = const.sector_size // w #tw — ширина одного тайла у пікселях
+        th = const.sector_size // h #th — висота одного тайла у пікселях
         free_tiles = [ #список координат всіх прохідних тайлів (де val == 0)
             (cx, ry)
             for ry, row in enumerate(tiles)
@@ -85,7 +85,7 @@ class MapController:
             if val == 0
         ]
         chests = [] #список для сундуків
-        for _ in range(max_chests_per_sector): #максимум два сундуки
+        for _ in range(const.max_chests_per_sector): #максимум два сундуки
             if not free_tiles: #якщо немає вільних тайлів, завершуємо
                 break
             cx, ry = random.choice(free_tiles) #вибираємо випадковий прохідний тайл
@@ -98,10 +98,10 @@ class MapController:
     def generate_full_maze(self):
         #генерує глобальний лабіринт між секторами, видаляючи стіни для створення проходів; використовує алгоритм "відступання назад"
         stack = [] #стек для збереження шляху
-        total = map_width * map_height #total — загальна кількість секторів
+        total = const.map_width * const.map_height #total — загальна кількість секторів
         visited = 1 #visited — кількість відвіданих секторів
-        cx = random.randrange(map_width) #cx — початкова координата x; randrange - вибирає випадкове число від 0 до map_width-1
-        cy = random.randrange(map_height) #cy — початкова координата y
+        cx = random.randrange(const.map_width) #cx — початкова координата x; randrange - вибирає випадкове число від 0 до const.map_width-1
+        cy = random.randrange(const.map_height) #cy — початкова координата y
         self.grid[cx][cy]['visited'] = True #позначаємо стартовий сектор як відвіданий
         while visited < total: #поки не відвідані всі сектори
             nbrs = self.get_unvisited_neighbors((cx, cy)) #отримуємо список сусідів, які ще не відвідані
@@ -114,17 +114,17 @@ class MapController:
                 visited += 1 #збільшуємо лічильник відвіданих секторів
             else: #якщо немає невідвіданих сусідів
                 cx, cy = stack.pop() #повертаємося назад по стеку
-        self.add_cycles(global_cycle_count) #додаємо додаткові проходи для ускладнення лабіринту
+        self.add_cycles(const.global_cycle_count) #додаємо додаткові проходи для ускладнення лабіринту
 
     def get_safe_transition_point(self, sector_pos):
         tiles = self.grid[sector_pos[0]][sector_pos[1]]['tiles'] #отримуємо локальний лабіринт сектора
-        tile_w = sector_size // tile_grid_size #ширина одного тайла у пікселях 
-                                               #весь сектор (квадрат) має розмір sector_size × sector_size пікселів
+        tile_w = const.sector_size // const.tile_grid_size #ширина одного тайла у пікселях 
+                                               #весь сектор (квадрат) має розмір const.sector_size × const.sector_size пікселів
                                                #він поділений на 9×9 тайлів
-                                               #ширина одного тайлу = sector_size // 9
-                                               #висота одного тайлу = sector_size // 9 (оскільки квадрат)
-        for y in range(tile_grid_size): #перебираємо всі рядки тайлів
-            for x in range(tile_grid_size): #перебираємо всі стовпці тайлів
+                                               #ширина одного тайлу = const.sector_size // 9
+                                               #висота одного тайлу = const.sector_size // 9 (оскільки квадрат)
+        for y in range(const.tile_grid_size): #перебираємо всі рядки тайлів
+            for x in range(const.tile_grid_size): #перебираємо всі стовпці тайлів
                 if tiles[y][x] == 0: #якщо тайл прохідний (0)
                     return (x * tile_w + tile_w // 2,  #повертаємо координати центру тайла
                             y * tile_w + tile_w // 2) #плюс половину ширини тайла, щоб отримати центр
@@ -134,8 +134,8 @@ class MapController:
         #додає count додаткових проходів між сусідніми секторами, щоб зробити лабіринт менш лінійним
         attempts = 0 #лічильник спроб
         while attempts < count: #повторюємо, поки не зробимо потрібну кількість проходів
-            x = random.randint(0, map_width - 2) #x — випадкова координата сектору по x (не останній)
-            y = random.randint(0, map_height - 2) #y — випадкова координата сектору по y (не останній)
+            x = random.randint(0, const.map_width - 2) #x — випадкова координата сектору по x (не останній)
+            y = random.randint(0, const.map_height - 2) #y — випадкова координата сектору по y (не останній)
             if random.choice((True, False)): #випадково вибираємо напрямок: вправо або вниз
                 nx, ny = x + 1, y #сусідній сектор праворуч
             else:
@@ -156,9 +156,9 @@ class MapController:
         x, y = cell #x і y — координати поточного сектору
         nbrs = [] #список невідвіданих сусідів
         if x>0 and not self.grid[x-1][y]['visited']: nbrs.append((x-1,y)) #ліворуч
-        if x<map_width-1 and not self.grid[x+1][y]['visited']: nbrs.append((x+1,y)) #праворуч
+        if x<const.map_width-1 and not self.grid[x+1][y]['visited']: nbrs.append((x+1,y)) #праворуч
         if y>0 and not self.grid[x][y-1]['visited']: nbrs.append((x,y-1)) #зверху
-        if y<map_height-1 and not self.grid[x][y+1]['visited']: nbrs.append((x,y+1)) #знизу
+        if y<const.map_height-1 and not self.grid[x][y+1]['visited']: nbrs.append((x,y+1)) #знизу
         return nbrs #повертаємо список координат
 
     def remove_wall(self, cur, nxt):
@@ -182,10 +182,10 @@ class MapController:
         w = self.grid[x][y]['walls'] #словник стін сектора
         t = 5 #товщина стіни у пікселях
         rects = [] #список прямокутників
-        if w['top']:    rects.append(pygame.Rect(0,0,sector_size,t)) #стіна зверху
-        if w['bottom']: rects.append(pygame.Rect(0,sector_size-t,sector_size,t)) #стіна знизу
-        if w['left']:   rects.append(pygame.Rect(0,0,t,sector_size)) #стіна ліворуч
-        if w['right']:  rects.append(pygame.Rect(sector_size-t,0,t,sector_size)) #стіна праворуч
+        if w['top']:    rects.append(pygame.Rect(0,0,const.sector_size,t)) #стіна зверху
+        if w['bottom']: rects.append(pygame.Rect(0,const.sector_size-t,const.sector_size,t)) #стіна знизу
+        if w['left']:   rects.append(pygame.Rect(0,0,t,const.sector_size)) #стіна ліворуч
+        if w['right']:  rects.append(pygame.Rect(const.sector_size-t,0,t,const.sector_size)) #стіна праворуч
         return rects #повертаємо список прямокутників
 
     def get_tile_colliders(self, sector_pos):
@@ -193,8 +193,8 @@ class MapController:
         x, y = sector_pos #координати сектора
         tiles = self.grid[x][y]['tiles'] #двовимірний масив тайлів сектора
         rects = [] #список прямокутників
-        tw = sector_size // len(tiles[0]) #ширина одного тайла у пікселях
-        th = sector_size // len(tiles) #висота одного тайла у пікселях
+        tw = const.sector_size // len(tiles[0]) #ширина одного тайла у пікселях
+        th = const.sector_size // len(tiles) #висота одного тайла у пікселях
         for ry, row in enumerate(tiles): #перебираємо всі рядки
             for cx, val in enumerate(row): #перебираємо всі тайли у рядку
                 if val == 1: #якщо тайл — стіна
@@ -218,24 +218,24 @@ class MapController:
         x, y = sector_pos #координати сектора
         sector = self.grid[x][y] #дані сектора
         bg = pygame.image.load("pictures/maze_background.png").convert() #завантажуємо зображення фону
-        bg = pygame.transform.scale(bg,(sector_size,sector_size)) #масштабуємо фон до розміру сектора
+        bg = pygame.transform.scale(bg,(const.sector_size,const.sector_size)) #масштабуємо фон до розміру сектора
         screen.blit(bg,(0,0)) #малюємо фон на екрані
-        t = 5; cell = sector_size//9 #t — товщина стіни, cell — ширина одного тайла
+        t = 5; cell = const.sector_size//9 #t — товщина стіни, cell — ширина одного тайла
         for direction, off in sector['entry_points']: #перебираємо всі точки входу у сектор
             start = off*cell; end = (off+1)*cell #обчислюємо координати отвору
             if direction == 'top': #якщо отвір зверху
                 pygame.draw.rect(screen, colors["ACID_GREEN"], (0,0,start,t)) #малюємо ліву частину стіни
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (end,0,sector_size-end,t)) #малюємо праву частину стіни
+                pygame.draw.rect(screen, colors["ACID_GREEN"], (end,0,const.sector_size-end,t)) #малюємо праву частину стіни
             elif direction == 'bottom': #якщо отвір знизу
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,sector_size-t,start,t))
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (end,sector_size-t,sector_size-end,t))
+                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,const.sector_size-t,start,t))
+                pygame.draw.rect(screen, colors["ACID_GREEN"], (end,const.sector_size-t,const.sector_size-end,t))
             elif direction == 'left': #якщо отвір ліворуч
                 pygame.draw.rect(screen, colors["ACID_GREEN"], (0,0,t,start))
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,end,t,sector_size-end))
+                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,end,t,const.sector_size-end))
             elif direction == 'right': #якщо отвір праворуч
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (sector_size-t,0,t,start))
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (sector_size-t,end,t,sector_size-end))
-        tw = sector_size//9; th = sector_size//9 #tw і th — розміри тайла у пікселях
+                pygame.draw.rect(screen, colors["ACID_GREEN"], (const.sector_size-t,0,t,start))
+                pygame.draw.rect(screen, colors["ACID_GREEN"], (const.sector_size-t,end,t,const.sector_size-end))
+        tw = const.sector_size//9; th = const.sector_size//9 #tw і th — розміри тайла у пікселях
         for ry, row in enumerate(sector['tiles']): #перебираємо всі рядки локального лабіринту
             for cx, val in enumerate(row): #перебираємо всі тайли у рядку
                 if val == 1: #якщо тайл — стіна
@@ -243,4 +243,4 @@ class MapController:
         for chest in sector['chests']: #перебираємо всі сундуки у секторі
             pygame.draw.rect(screen, colors["YELLOW"], chest) #малюємо сундук
         if (x,y) == self.treasure_pos: #якщо сектор містить фінальний скарб
-            pygame.draw.circle(screen, colors["GREEN"], (sector_size//2,sector_size//2),20) #малюємо скарб у центрі сектора
+            pygame.draw.circle(screen, colors["GREEN"], (const.sector_size//2,const.sector_size//2),20) #малюємо скарб у центрі сектора
