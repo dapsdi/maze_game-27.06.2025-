@@ -17,28 +17,32 @@ tile_grid_size = 9  #розмір сітки тайлів у секторі
 
 #перелік доступних біомів
 BIOMES = {
+    "plains": {
+        "background": "pictures/biomes/plains_background.png",
+        "wall_color":  (141, 25, 83),
+    },
     "jungle": {
-        "background": "pictures/jungle_background.png",
+        "background": "pictures/biomes/jungle_background.png",
         "wall_color":  (66, 32, 128),
     },
 
     "swamp": {
-        "background": "pictures/swamp_background.png",
+        "background": "pictures/biomes/swamp_background.png",
         "wall_color":  (72, 66, 98),
     },
 
     "desert": {
-        "background": "pictures/desert_background.png",
+        "background": "pictures/biomes/desert_background.png",
         "wall_color":  (69, 124, 168),
     },
 
     "mountain": {
-        "background": "pictures/mountain_background.png",
+        "background": "pictures/biomes/mountain_background.png",
         "wall_color":  (80, 0, 0),
     },
 
     "cave": {
-        "background": "pictures/cave_background.png",
+        "background": "pictures/biomes/cave_background.png",
         "wall_color":  (59, 73, 89),
     },
 }

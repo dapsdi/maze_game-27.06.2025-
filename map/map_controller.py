@@ -3,6 +3,7 @@ import pygame
 import random
 import settings.constants as const #імпортуємо константи з модуля settings.constants
 from ui.colors import colors
+from settings.constants import BIOMES
 
 class MapController:
     def __init__(self):
@@ -25,6 +26,10 @@ class MapController:
             random.randrange(const.map_width),
             random.randrange(const.map_height)
         )
+
+        self.biome_map = [[None]*const.map_height for _ in range (const.map_width)] #створюємо двовимірний список для біомів, заповнений None; кожен сектор може мати свій біом
+        self.assign_biomes() #викликаємо метод для призначення біомів кожному сектору
+
         #генеруємо глобальний лабіринт між секторами; видаляємо стіни для створення проходів
         self.generate_full_maze()
 
@@ -94,6 +99,21 @@ class MapController:
             py = ry * th + (th - 30)//2 #py — координата сундука по y, вирівнюємо по центру тайла
             chests.append(pygame.Rect(px, py, 30, 30)) #створюємо прямокутник-сундук розміром 30x30
         return chests #повертаємо список сундуків
+
+    def assign_biomes(self):
+        names = list(BIOMES.keys()) #отримуємо список назв біомів
+        #спочатку розподілити по одному сектору кожного біома
+        coordinates = [(x, y) for x in range(const.map_width) for y in range(const.map_height)] #список всіх координат секторів
+        random.shuffle(coordinates) #перемішуємо координати, щоб розподіл був випадковим
+        #забезпечення покриття: кожен біом має бути присутній хоча б один раз
+        for name, coordinates in zip(names, coordinates):
+            x, y = coordinates #розпаковуємо координати
+            self.biome_map[x][y] = name #призначаємо біом сектору
+        #заповнюємо решту секторів випадковими біомами
+        for x in range(const.map_width):
+            for y in range(const.map_height):
+                if self.biome_map[x][y] is None:
+                    self.biome_map[x][y] = random.choice(names)
 
     def generate_full_maze(self):
         #генерує глобальний лабіринт між секторами, видаляючи стіни для створення проходів; використовує алгоритм "відступання назад"
@@ -217,30 +237,49 @@ class MapController:
         #відповідає за рендеринг поточного сектора: малює фон, глобальні та локальні стіни, сундуки і фінальний скарб
         x, y = sector_pos #координати сектора
         sector = self.grid[x][y] #дані сектора
-        bg = pygame.image.load("pictures/maze_background.png").convert() #завантажуємо зображення фону
+
+        biome_name = sector["biome"]
+        parameters = BIOMES[biome_name] #отримуємо параметри біома з констант
+        background_path = parameters["background"] #шлях до зображення фону біома
+        wall_color = parameters["wall_color"] #колір стін біома
+
+
+        #фон
+        bg = pygame.image.load(background_path).convert() #завантажуємо зображення фону
         bg = pygame.transform.scale(bg,(const.sector_size,const.sector_size)) #масштабуємо фон до розміру сектора
         screen.blit(bg,(0,0)) #малюємо фон на екрані
+        
         t = 5; cell = const.sector_size//9 #t — товщина стіни, cell — ширина одного тайла
+        
         for direction, off in sector['entry_points']: #перебираємо всі точки входу у сектор
             start = off*cell; end = (off+1)*cell #обчислюємо координати отвору
+            
             if direction == 'top': #якщо отвір зверху
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,0,start,t)) #малюємо ліву частину стіни
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (end,0,const.sector_size-end,t)) #малюємо праву частину стіни
+                pygame.draw.rect(screen, wall_color, (0,0,start,t)) #малюємо ліву частину стіни
+                pygame.draw.rect(screen, wall_color, (end,0,const.sector_size-end,t)) #малюємо праву частину стіни
+            
             elif direction == 'bottom': #якщо отвір знизу
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,const.sector_size-t,start,t))
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (end,const.sector_size-t,const.sector_size-end,t))
+                pygame.draw.rect(screen, wall_color, (0,const.sector_size-t,start,t))
+                pygame.draw.rect(screen, wall_color, (end,const.sector_size-t,const.sector_size-end,t))
+            
             elif direction == 'left': #якщо отвір ліворуч
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,0,t,start))
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (0,end,t,const.sector_size-end))
+                pygame.draw.rect(screen, wall_color, (0,0,t,start))
+                pygame.draw.rect(screen, wall_color, (0,end,t,const.sector_size-end))
+            
             elif direction == 'right': #якщо отвір праворуч
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (const.sector_size-t,0,t,start))
-                pygame.draw.rect(screen, colors["ACID_GREEN"], (const.sector_size-t,end,t,const.sector_size-end))
-        tw = const.sector_size//9; th = const.sector_size//9 #tw і th — розміри тайла у пікселях
+                pygame.draw.rect(screen, wall_color, (const.sector_size-t,0,t,start))
+                pygame.draw.rect(screen, wall_color, (const.sector_size-t,end,t,const.sector_size-end))
+        
+        tw = const.sector_size // const.tile_grid_size #tw і th — розміри тайла у пікселях
+        th = tw
+        
         for ry, row in enumerate(sector['tiles']): #перебираємо всі рядки локального лабіринту
             for cx, val in enumerate(row): #перебираємо всі тайли у рядку
                 if val == 1: #якщо тайл — стіна
-                    pygame.draw.rect(screen, colors["DEEP_PINK"], (cx*tw, ry*th, tw, th)) #малюємо стіну
+                    pygame.draw.rect(screen, wall_color, (cx*tw, ry*th, tw, th)) #малюємо стіну
+        
         for chest in sector['chests']: #перебираємо всі сундуки у секторі
             pygame.draw.rect(screen, colors["YELLOW"], chest) #малюємо сундук
+        
         if (x,y) == self.treasure_pos: #якщо сектор містить фінальний скарб
             pygame.draw.circle(screen, colors["GREEN"], (const.sector_size//2,const.sector_size//2),20) #малюємо скарб у центрі сектора
