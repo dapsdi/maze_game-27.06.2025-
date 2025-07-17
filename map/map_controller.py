@@ -30,20 +30,16 @@ class MapController:
         self.biome_map = [[None]*const.map_height for _ in range (const.map_width)] #створюємо двовимірний список для біомів, заповнений None; кожен сектор може мати свій біом
         self.assign_biomes() #викликаємо метод для призначення біомів кожному сектору
 
-        #генеруємо глобальний лабіринт між секторами; видаляємо стіни для створення проходів
-        self.generate_full_maze()
-
+               #----------БІОМИ----------#
         #додаємо точки входу та сундуки у кожен сектор після того, як визначені проходи між секторами
         for x in range(const.map_width):
             for y in range(const.map_height):
-                entries = [] #тимчасовий список для точок входу у сектор
-                for direction, is_wall in self.grid[x][y]['walls'].items(): #перебираємо всі напрямки стін
-                    if not is_wall: #якщо стіна відсутня, створюємо точку входу
-                        offset = random.randint(const.entry_offset_min, const.entry_offset_max) #offset визначає зсув отвору на краю сектора
-                        entries.append((direction, offset)) #додаємо точку входу у список
-                        self.apply_entry_point(self.grid[x][y]['tiles'], direction, offset) #вирізаємо отвір у локальному лабіринті
-                self.grid[x][y]['entry_points'] = entries #зберігаємо точки входу у секторі
-                self.grid[x][y]['chests'] = self.place_chests(self.grid[x][y]['tiles']) #розміщуємо сундуки у прохідних тайлах
+                #перенсимо назву біома з біомної карти у сектор
+                self.grid[x][y]['biome'] = self.biome_map[x][y] #встановлюємо біом сектора
+
+        #генеруємо глобальний лабіринт між секторами; видаляємо стіни для створення проходів
+        self.generate_full_maze()
+        
 
     def generate_tile_maze(self):
         #генерує локальний лабіринт розміром 9x9 для кожного сектора; повертає двовимірний масив, де 1 — стіна, 0 — прохід
@@ -76,6 +72,11 @@ class MapController:
         elif direction == 'right': #якщо напрямок "праворуч", робимо прохід у останньому стовпці
             tiles[off][size-1] = 0
             tiles[off][size-2] = 0 #додаємо ще один прохідний тайл ліворуч від отвору, щоб уникнути застрягання
+
+    def get_biome(self, sector_pos):
+        #повертає назву біома для сектора sector_pos; sector_pos — кортеж (x, y)
+        x, y = sector_pos
+        return self.biome_map[x][y] 
 
     def place_chests(self, tiles):
         #розміщує до двох сундуків у випадкових прохідних тайлах локального лабіринту tiles
