@@ -18,11 +18,23 @@ class Game:
         const.tile_px     = min(const.window_width, const.window_height) // const.tile_grid_size
         const.sector_size = const.tile_px * const.tile_grid_size
 
-        # ініціалізуємо карту, гравця, камеру
+        #встановлення початкового спавна для гравця(завжди біом рівнин)
         self.map_controller = MapController()
-        self.player         = Player()
-        self.camera         = Camera()
-        self.clock          = pygame.time.Clock()
+
+        start_sector = None
+        for x in range(const.map_width):
+            for y in range(const.map_height):
+                if self.map_controller.get_biome((x, y)) == "plains":
+                    self.sector = (x, y)
+                    break
+            if start_sector:
+                break
+        if start_sector is None:
+            start_sector = (0, 0) #якщо не знайдено рівнин, спавнимо у (0, 0)
+        
+        self.player = Player(start_sector = start_sector)
+        self.camera = Camera()
+        self.clock = pygame.time.Clock()
 
         # показуємо стартовий екран із двома кнопками
         show_start_screen(self.screen)
