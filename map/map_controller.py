@@ -39,6 +39,20 @@ class MapController:
 
         #генеруємо глобальний лабіринт між секторами; видаляємо стіни для створення проходів
         self.generate_full_maze()
+
+        for x in range(const.map_width):
+            for y in range(const.map_height):
+                entries = []
+                #стіни що були видалені під час генерування повного лабіринту
+                for direction, is_wall in self.grid[x][y]['walls'].items():
+                    if not is_wall:
+                        offset = random.randint(const.entry_offset_min, const.entry_offset_max)
+                        entries.append((direction,offset))
+                        #вирізання отвору в локальному лабіринти tiles
+                        self.apply_entry_point(self.grid[x][y]['tiles'], direction, offset)
+                self.grid[x][y]['entry_points'] = entries
+                #+ сундуки
+                self.grid[x][y]['chests'] = self.place_chests(self.grid[x][y]['tiles'])
         
 
     def generate_tile_maze(self):
