@@ -12,3 +12,5 @@ game.run()
 
 #після завершення циклу — вихід з pygame
 pygame.quit()
+
+        

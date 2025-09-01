@@ -1,0 +1,11 @@
+{
+    "powermode.enabled": true,
+    "powermode.presets": "fireworks",
+    "powermode.combo.location": "statusbar",
+    "powermode.combo.counterEnabled": "show",
+    "powermode.combo.timeout": 0,
+    "workbench.colorTheme": "SynthWave '84",
+    "workbench.preferredDarkColorTheme": "SynthWave '84",
+    "powermode.shake.enabled": false,
+    "powermode.explosions.duration": 5000
+}
