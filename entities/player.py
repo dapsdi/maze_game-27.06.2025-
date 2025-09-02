@@ -1,18 +1,19 @@
-#entities/player.py
 import pygame
 from entities.animation_manager import AnimationManager
 import settings.constants as const
+import time
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, start_sector=(0,0)):
         super().__init__()
         self.sector = start_sector
-        self.speed = 4
+        self.base_speed = 4
+        self.speed = self.base_speed
 
-        #ініціалізація менеджера анімацій
+        # ініціалізація менеджера анімацій
         self.anim = AnimationManager("animations/goblin")
 
-        #початкові координати
+        # початкові координати (використовуємо const.tile_px)
         w, h = const.tile_px, const.tile_px
         spawn_x = const.tile_px + const.tile_px//2 - w//2
         spawn_y = const.tile_px + const.tile_px//2 - h//2
@@ -21,10 +22,32 @@ class Player(pygame.sprite.Sprite):
         self.state = 'idle'
         self.direction = 'down'
 
+        # --- Лічильник зібраних квітів ---
+        self.flowers = 0
+
+        # --- Баф швидкості ---
+        self.boost_active = False
+        self.boost_end_time = 0
+
     def get_sector(self):
         return self.sector
 
+    def activate_speed_boost(self):
+        """Активація бафа швидкості, якщо є 3 квітки"""
+        if self.flowers >= 3 and not self.boost_active:
+            self.flowers -= 3
+            self.speed = self.base_speed * 2.5
+            self.boost_active = True
+            self.boost_end_time = time.time() + 7  # тривалість 7 секунд
+            return True
+        return False
+
     def update(self, dt, walls):
+        # --- Перевірка чи не закінчився баф ---
+        if self.boost_active and time.time() >= self.boost_end_time:
+            self.speed = self.base_speed
+            self.boost_active = False
+
         keys = pygame.key.get_pressed()
         dx = dy = 0
 
@@ -33,7 +56,7 @@ class Player(pygame.sprite.Sprite):
         if keys[pygame.K_w]: dy = -self.speed; self.direction = 'up'
         elif keys[pygame.K_s]: dy = self.speed; self.direction = 'down'
 
-        #рух + колізії
+        # рух + колізії
         self.rect.x += dx
         for wall in walls:
             if self.rect.colliderect(wall):
@@ -46,10 +69,10 @@ class Player(pygame.sprite.Sprite):
                 if dy > 0: self.rect.bottom = wall.top
                 if dy < 0: self.rect.top = wall.bottom
 
-        #визначення стану
+        # визначення стану
         self.state = 'idle' if dx == 0 and dy == 0 else 'walk'
 
-        #оновлення анімації
+        # оновлення анімації
         self.anim.update(dt, self.state, self.direction)
 
     def draw(self, screen):

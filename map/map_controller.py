@@ -1,300 +1,352 @@
-# map/map_controller.py
+#map/map_controller.py#
+import os
+import glob
 import pygame
 import random
-import settings.constants as const #імпортуємо константи з модуля settings.constants
+import settings.constants as const  # імпортуємо константи
 from ui.colors import colors
 from settings.constants import BIOMES
 
 class MapController:
     def __init__(self):
-        #створюємо двовимірний список grid, де кожен елемент — це словник з даними про сектор; const.map_width і const.map_height визначають розміри лабіринту
+        # створюємо grid
         self.grid = [
             [
                 {
-                    'visited': False, #означає, чи був сектор відвіданий при генерації глобального лабіринту; використовується у generate_full_maze
-                    'walls': {'top': True, 'bottom': True, 'left': True, 'right': True}, #словник, який зберігає наявність стін сектора; всі стіни спочатку присутні
-                    'tiles': self.generate_tile_maze(), #двовимірний масив, що описує локальний лабіринт у секторі; генерується функцією generate_tile_maze
-                    'chests': [], #список сундуків у секторі; заповнюється після генерації проходів
-                    'entry_points': [] #список точок входу у сектор; заповнюється після видалення стін
+                    'visited': False,
+                    'walls': {'top': True, 'bottom': True, 'left': True, 'right': True},
+                    'tiles': self.generate_tile_maze(),
+                    'chests': [],
+                    'entry_points': []
                 }
                 for _ in range(const.map_height)
             ]
             for _ in range(const.map_width)
         ]
-        #генеруємо випадкову позицію фінального скарбу; random.randrange(const.map_width) та random.randrange(const.map_height) вибирають координати у межах лабіринту
+
         self.treasure_pos = (
             random.randrange(const.map_width),
             random.randrange(const.map_height)
         )
 
-        self.biome_map = [[None]*const.map_height for _ in range (const.map_width)] #створюємо двовимірний список для біомів, заповнений None; кожен сектор може мати свій біом
-        self.assign_biomes() #викликаємо метод для призначення біомів кожному сектору
+        # карта біомів
+        self.biome_map = [[None]*const.map_height for _ in range(const.map_width)]
+        self.assign_biomes()  # <-- тут гарантовано є метод assign_biomes
 
-               #----------БІОМИ----------#
-        #додаємо точки входу та сундуки у кожен сектор після того, як визначені проходи між секторами
+        # завантаження картинок квітів (якщо є)
+        self.flower_images = []
+        self.ui_flower_frames = []
+        self.load_flower_images()
+
+        # переносимо назву біома в дані кожного сектора
         for x in range(const.map_width):
             for y in range(const.map_height):
-                #перенсимо назву біома з біомної карти у сектор
-                self.grid[x][y]['biome'] = self.biome_map[x][y] #встановлюємо біом сектора
+                self.grid[x][y]['biome'] = self.biome_map[x][y]
 
-        #генеруємо глобальний лабіринт між секторами; видаляємо стіни для створення проходів
+        # генеруємо глобальний лабіринт
         self.generate_full_maze()
 
+        # вирізаємо входи і розміщуємо "сундуки"/квітки
         for x in range(const.map_width):
             for y in range(const.map_height):
                 entries = []
-                #стіни що були видалені під час генерування повного лабіринту
                 for direction, is_wall in self.grid[x][y]['walls'].items():
                     if not is_wall:
                         offset = random.randint(const.entry_offset_min, const.entry_offset_max)
-                        entries.append((direction,offset))
-                        #вирізання отвору в локальному лабіринти tiles
+                        entries.append((direction, offset))
                         self.apply_entry_point(self.grid[x][y]['tiles'], direction, offset)
                 self.grid[x][y]['entry_points'] = entries
-                #+ сундуки
                 self.grid[x][y]['chests'] = self.place_chests(self.grid[x][y]['tiles'])
-        
 
+
+    # ----------------- завантаження квітів -----------------
+    def load_flower_images(self):
+            # Зміна: шукаємо ПЕРШОЧЕРГОВО картинки у папці realistic_flowers (усі файли flower_*.png).
+            # Якщо там нічого — fallback на загальний пошук у assets/flowers/**/*.(png|jpg|gif)
+            specific_dir = os.path.join("assets", "flowers", "realistic_flowers")
+            paths = []
+
+            # шукаємо всі png у specific_dir
+            if os.path.isdir(specific_dir):
+                paths = sorted(glob.glob(os.path.join(specific_dir, "flower_*.png")))
+
+            # fallback — загальний пошук по всьому assets/flowers
+            if not paths:
+                base = "assets/flowers"
+                exts = ("*.png", "*.jpg", "*.jpeg", "*.gif")
+                if os.path.isdir(base):
+                    for root, dirs, files in os.walk(base):
+                        for ext in exts:
+                            paths.extend(glob.glob(os.path.join(root, ext)))
+                paths = sorted(set(paths))
+
+            if not paths:
+                self.flower_images = []
+                self.ui_flower_frames = []
+                return
+
+            # визначаємо розмір для відображення у секторі та для UI-іконок
+            tile_px = const.tile_px if const.tile_px else (const.sector_size // const.tile_grid_size if const.sector_size else 32)
+            flower_display_size = max(12, int(tile_px * 0.6))
+            ui_size = max(12, int(tile_px * 0.35))
+
+            loaded = []
+            for p in paths:
+                try:
+                    img = pygame.image.load(p).convert_alpha()
+                except Exception:
+                    continue
+                img_tile = pygame.transform.smoothscale(img, (flower_display_size, flower_display_size))
+                loaded.append(img_tile)
+
+            self.flower_images = loaded
+
+            # UI frames: беремо до 5 фреймів — якщо менше картинок, повторюємо їх
+            ui_frames = []
+            if loaded:
+                for i in range(5):
+                    src = loaded[i % len(loaded)]
+                    ui_frames.append(pygame.transform.smoothscale(src, (ui_size, ui_size)))
+            self.ui_flower_frames = ui_frames
+
+
+
+    # ----------------- генерація локального лабіринту -----------------
     def generate_tile_maze(self):
-        #генерує локальний лабіринт розміром 9x9 для кожного сектора; повертає двовимірний масив, де 1 — стіна, 0 — прохід
-        w, h = 9, 9 #w і h — ширина і висота лабіринту
-        maze = [[1]*w for _ in range(h)] #створюємо матрицю, заповнену одиницями (стіни)
-        def carve(cx, cy): #рекурсивна функція для створення проходів; cx, cy — поточні координати
-            maze[cy][cx] = 0 #позначаємо поточний тайл як прохідний
-            dirs = [(1,0),(-1,0),(0,1),(0,-1)] #список напрямків: вправо, вліво, вниз, вгору
-            random.shuffle(dirs) #перемішуємо напрямки для випадковості
-            for dx, dy in dirs: #перебираємо всі напрямки
-                nx, ny = cx + dx*2, cy + dy*2 #обчислюємо координати наступного тайла через одну стіну
-                if 0 <= nx < w and 0 <= ny < h and maze[ny][nx] == 1: #перевіряємо, чи новий тайл у межах і ще не відвіданий
-                    maze[cy+dy][cx+dx] = 0 #робимо прохід між поточним і наступним тайлом
-                    carve(nx, ny) #рекурсивно продовжуємо генерацію з нового тайла
-        carve(1,1) #стартуємо генерацію з координат (1,1)
-        return maze #повертаємо готовий локальний лабіринт
+        w, h = 9, 9
+        maze = [[1]*w for _ in range(h)]
+        def carve(cx, cy):
+            maze[cy][cx] = 0
+            dirs = [(1,0),(-1,0),(0,1),(0,-1)]
+            random.shuffle(dirs)
+            for dx, dy in dirs:
+                nx, ny = cx + dx*2, cy + dy*2
+                if 0 <= nx < w and 0 <= ny < h and maze[ny][nx] == 1:
+                    maze[cy+dy][cx+dx] = 0
+                    carve(nx, ny)
+        carve(1,1)
+        return maze
 
     def apply_entry_point(self, tiles, direction, off):
-        #вирізає отвір у локальному лабіринті tiles на відповідному краю сектора; direction — напрямок, off — зсув
-        size = len(tiles) #size — розмір лабіринту (кількість тайлів по одній стороні)
-        if direction == 'top': #якщо напрямок "верх", робимо прохід у верхньому рядку
+        size = len(tiles)
+        if direction == 'top':
             tiles[0][off] = 0
-            tiles[1][off] = 0 #додаємо ще один прохідний тайл під отвором, щоб уникнути застрягання
-        elif direction == 'bottom': #якщо напрямок "низ", робимо прохід у нижньому рядку
+            tiles[1][off] = 0
+        elif direction == 'bottom':
             tiles[size-1][off] = 0
-            tiles[size-2][off] = 0 #додаємо ще один прохідний тайл над отвором, щоб уникнути застрягання
-        elif direction == 'left': #якщо напрямок "ліворуч", робимо прохід у першому стовпці
+            tiles[size-2][off] = 0
+        elif direction == 'left':
             tiles[off][0] = 0
-            tiles[off][1] = 0 #додаємо ще один прохідний тайл праворуч від отвору, щоб уникнути застрягання
-        elif direction == 'right': #якщо напрямок "праворуч", робимо прохід у останньому стовпці
+            tiles[off][1] = 0
+        elif direction == 'right':
             tiles[off][size-1] = 0
-            tiles[off][size-2] = 0 #додаємо ще один прохідний тайл ліворуч від отвору, щоб уникнути застрягання
+            tiles[off][size-2] = 0
 
-    def get_biome(self, sector_pos):
-        #повертає назву біома для сектора sector_pos; sector_pos — кортеж (x, y)
-        x, y = sector_pos
-        return self.biome_map[x][y] 
-
-    def place_chests(self, tiles):
-        #розміщує до двох сундуків у випадкових прохідних тайлах локального лабіринту tiles
-        w = len(tiles[0]) #w — ширина лабіринту
-        h = len(tiles) #h — висота лабіринту
-        tw = const.sector_size // w #tw — ширина одного тайла у пікселях
-        th = const.sector_size // h #th — висота одного тайла у пікселях
-        free_tiles = [ #список координат всіх прохідних тайлів (де val == 0)
-            (cx, ry)
-            for ry, row in enumerate(tiles)
-            for cx, val in enumerate(row)
-            if val == 0
-        ]
-        chests = [] #список для сундуків
-        for _ in range(const.max_chests_per_sector): #максимум два сундуки
-            if not free_tiles: #якщо немає вільних тайлів, завершуємо
-                break
-            cx, ry = random.choice(free_tiles) #вибираємо випадковий прохідний тайл
-            free_tiles.remove((cx, ry)) #видаляємо його зі списку, щоб не повторювати
-            px = cx * tw + (tw - 30)//2 #px — координата сундука по x, вирівнюємо по центру тайла
-            py = ry * th + (th - 30)//2 #py — координата сундука по y, вирівнюємо по центру тайла
-            chests.append(pygame.Rect(px, py, 30, 30)) #створюємо прямокутник-сундук розміром 30x30
-        return chests #повертаємо список сундуків
-
+    # ----------------- ASSIGN BIOMES (ВАЖЛИВО) -----------------
     def assign_biomes(self):
-        names = list(BIOMES.keys()) #отримуємо список назв біомів
-        #спочатку розподілити по одному сектору кожного біома
-        coordinates = [(x, y) for x in range(const.map_width) for y in range(const.map_height)] #список всіх координат секторів
-        random.shuffle(coordinates) #перемішуємо координати, щоб розподіл був випадковим
-        #забезпечення покриття: кожен біом має бути присутній хоча б один раз
-        for name, coordinates in zip(names, coordinates):
-            x, y = coordinates #розпаковуємо координати
-            self.biome_map[x][y] = name #призначаємо біом сектору
-        #заповнюємо решту секторів випадковими біомами
+        names = list(BIOMES.keys())
+        coordinates = [(x, y) for x in range(const.map_width) for y in range(const.map_height)]
+        random.shuffle(coordinates)
+        # присвоїти по одному сектору кожного біома
+        for name, coord in zip(names, coordinates):
+            x, y = coord
+            self.biome_map[x][y] = name
+        # заповнити решту
         for x in range(const.map_width):
             for y in range(const.map_height):
                 if self.biome_map[x][y] is None:
                     self.biome_map[x][y] = random.choice(names)
 
+    # ----------------- інші методи -----------------
+    def get_biome(self, sector_pos):
+        x, y = sector_pos
+        return self.biome_map[x][y]
+
+    def place_chests(self, tiles):
+        w = len(tiles[0])
+        h = len(tiles)
+        tw = const.sector_size // w
+        th = const.sector_size // h
+
+        free_tiles = [
+            (cx, ry)
+            for ry, row in enumerate(tiles)
+            for cx, val in enumerate(row)
+            if val == 0
+        ]
+        chests = []
+        if not free_tiles or not self.flower_images:
+            return []
+
+        for _ in range(const.max_chests_per_sector):
+            if not free_tiles:
+                break
+            cx, ry = random.choice(free_tiles)
+            free_tiles.remove((cx, ry))
+            flower_img = random.choice(self.flower_images)
+            fw, fh = flower_img.get_size()
+            px = cx * tw + (tw - fw)//2
+            py = ry * th + (th - fh)//2
+            rect = pygame.Rect(px, py, fw, fh)
+            chests.append({'rect': rect, 'image': flower_img})
+        return chests
+
     def generate_full_maze(self):
-        #генерує глобальний лабіринт між секторами, видаляючи стіни для створення проходів; використовує алгоритм "відступання назад"
-        stack = [] #стек для збереження шляху
-        total = const.map_width * const.map_height #total — загальна кількість секторів
-        visited = 1 #visited — кількість відвіданих секторів
-        cx = random.randrange(const.map_width) #cx — початкова координата x; randrange - вибирає випадкове число від 0 до const.map_width-1
-        cy = random.randrange(const.map_height) #cy — початкова координата y
-        self.grid[cx][cy]['visited'] = True #позначаємо стартовий сектор як відвіданий
-        while visited < total: #поки не відвідані всі сектори
-            nbrs = self.get_unvisited_neighbors((cx, cy)) #отримуємо список сусідів, які ще не відвідані
-            if nbrs: #якщо є невідвідані сусіди
-                nx, ny = random.choice(nbrs) #вибираємо випадкового сусіда
-                self.remove_wall((cx, cy), (nx, ny)) #видаляємо стіну між поточним сектором і сусідом
-                stack.append((cx, cy)) #додаємо поточний сектор у стек
-                cx, cy = nx, ny #переходимо до сусіда
-                self.grid[cx][cy]['visited'] = True #позначаємо новий сектор як відвіданий
-                visited += 1 #збільшуємо лічильник відвіданих секторів
-            else: #якщо немає невідвіданих сусідів
-                cx, cy = stack.pop() #повертаємося назад по стеку
-        self.add_cycles(const.global_cycle_count) #додаємо додаткові проходи для ускладнення лабіринту
+        stack = []
+        total = const.map_width * const.map_height
+        visited = 1
+        cx = random.randrange(const.map_width)
+        cy = random.randrange(const.map_height)
+        self.grid[cx][cy]['visited'] = True
+        while visited < total:
+            nbrs = self.get_unvisited_neighbors((cx, cy))
+            if nbrs:
+                nx, ny = random.choice(nbrs)
+                self.remove_wall((cx, cy), (nx, ny))
+                stack.append((cx, cy))
+                cx, cy = nx, ny
+                self.grid[cx][cy]['visited'] = True
+                visited += 1
+            else:
+                cx, cy = stack.pop()
+        self.add_cycles(const.global_cycle_count)
 
     def get_safe_transition_point(self, sector_pos):
-        tiles = self.grid[sector_pos[0]][sector_pos[1]]['tiles'] #отримуємо локальний лабіринт сектора
-        tile_w = const.sector_size // const.tile_grid_size #ширина одного тайла у пікселях 
-                                               #весь сектор (квадрат) має розмір const.sector_size × const.sector_size пікселів
-                                               #він поділений на 9×9 тайлів
-                                               #ширина одного тайлу = const.sector_size // 9
-                                               #висота одного тайлу = const.sector_size // 9 (оскільки квадрат)
-        for y in range(const.tile_grid_size): #перебираємо всі рядки тайлів
-            for x in range(const.tile_grid_size): #перебираємо всі стовпці тайлів
-                if tiles[y][x] == 0: #якщо тайл прохідний (0)
-                    return (x * tile_w + tile_w // 2,  #повертаємо координати центру тайла
-                            y * tile_w + tile_w // 2) #плюс половину ширини тайла, щоб отримати центр
-
+        tiles = self.grid[sector_pos[0]][sector_pos[1]]['tiles']
+        tile_w = const.sector_size // const.tile_grid_size
+        for y in range(const.tile_grid_size):
+            for x in range(const.tile_grid_size):
+                if tiles[y][x] == 0:
+                    return (x * tile_w + tile_w // 2,
+                            y * tile_w + tile_w // 2)
 
     def add_cycles(self, count):
-        #додає count додаткових проходів між сусідніми секторами, щоб зробити лабіринт менш лінійним
-        attempts = 0 #лічильник спроб
-        while attempts < count: #повторюємо, поки не зробимо потрібну кількість проходів
-            x = random.randint(0, const.map_width - 2) #x — випадкова координата сектору по x (не останній)
-            y = random.randint(0, const.map_height - 2) #y — випадкова координата сектору по y (не останній)
-            if random.choice((True, False)): #випадково вибираємо напрямок: вправо або вниз
-                nx, ny = x + 1, y #сусідній сектор праворуч
+        attempts = 0
+        while attempts < count:
+            x = random.randint(0, const.map_width - 2)
+            y = random.randint(0, const.map_height - 2)
+            if random.choice((True, False)):
+                nx, ny = x + 1, y
             else:
-                nx, ny = x, y + 1 #сусідній сектор знизу
-            w1 = self.grid[x][y]['walls'] #w1 — словник стін поточного сектору
-            w2 = self.grid[nx][ny]['walls'] #w2 — словник стін сусіднього сектору
-            #перевіряємо, чи між секторами є стіни, які можна видалити
+                nx, ny = x, y + 1
+            w1 = self.grid[x][y]['walls']
+            w2 = self.grid[nx][ny]['walls']
             if ((nx==x+1 and w1['right'] and w2['left'])
             or (ny==y+1 and w1['bottom'] and w2['top'])):
-                if nx==x+1: #якщо сусід праворуч
-                    w1['right']=False; w2['left']=False #видаляємо стіни справа і зліва відповідно
-                else: #якщо сусід знизу
-                    w1['bottom']=False; w2['top']=False #видаляємо стіни знизу і зверху відповідно
-            attempts += 1 #збільшуємо лічильник спроб
+                if nx==x+1:
+                    w1['right']=False; w2['left']=False
+                else:
+                    w1['bottom']=False; w2['top']=False
+            attempts += 1
 
     def get_unvisited_neighbors(self, cell):
-        #повертає список координат сусідніх секторів, які ще не були відвідані при генерації глобального лабіринту
-        x, y = cell #x і y — координати поточного сектору
-        nbrs = [] #список невідвіданих сусідів
-        if x>0 and not self.grid[x-1][y]['visited']: nbrs.append((x-1,y)) #ліворуч
-        if x<const.map_width-1 and not self.grid[x+1][y]['visited']: nbrs.append((x+1,y)) #праворуч
-        if y>0 and not self.grid[x][y-1]['visited']: nbrs.append((x,y-1)) #зверху
-        if y<const.map_height-1 and not self.grid[x][y+1]['visited']: nbrs.append((x,y+1)) #знизу
-        return nbrs #повертаємо список координат
+        x, y = cell
+        nbrs = []
+        if x>0 and not self.grid[x-1][y]['visited']: nbrs.append((x-1,y))
+        if x<const.map_width-1 and not self.grid[x+1][y]['visited']: nbrs.append((x+1,y))
+        if y>0 and not self.grid[x][y-1]['visited']: nbrs.append((x,y-1))
+        if y<const.map_height-1 and not self.grid[x][y+1]['visited']: nbrs.append((x,y+1))
+        return nbrs
 
     def remove_wall(self, cur, nxt):
-        #видаляє стіну між двома сусідніми секторами cur і nxt; cur і nxt — кортежі координат
-        cx, cy = cur #координати поточного сектору
-        nx, ny = nxt #координати сусіднього сектору
-        wcur = self.grid[cx][cy]['walls'] #словник стін поточного сектору
-        wnxt = self.grid[nx][ny]['walls'] #словник стін сусіднього сектору
-        if nx == cx+1: #сусід праворуч
-            wcur['right'] = False; wnxt['left'] = False #видаляємо стіни справа і зліва
-        elif nx == cx-1: #сусід ліворуч
-            wcur['left']  = False; wnxt['right']= False #видаляємо стіни зліва і справа
-        elif ny == cy+1: #сусід знизу
-            wcur['bottom']= False; wnxt['top']  = False #видаляємо стіни знизу і зверху
-        else: #сусід зверху
-            wcur['top']   = False; wnxt['bottom']= False #видаляємо стіни зверху і знизу
+        cx, cy = cur
+        nx, ny = nxt
+        wcur = self.grid[cx][cy]['walls']
+        wnxt = self.grid[nx][ny]['walls']
+        if nx == cx+1:
+            wcur['right'] = False; wnxt['left'] = False
+        elif nx == cx-1:
+            wcur['left']  = False; wnxt['right']= False
+        elif ny == cy+1:
+            wcur['bottom']= False; wnxt['top']  = False
+        else:
+            wcur['top']   = False; wnxt['bottom']= False
 
     def get_sector_walls(self, sector_pos):
-        #повертає список прямокутників, які представляють глобальні стіни сектора для рендерингу
-        x, y = sector_pos #координати сектора
-        w = self.grid[x][y]['walls'] #словник стін сектора
-        t = 5 #товщина стіни у пікселях
-        rects = [] #список прямокутників
-        if w['top']:    rects.append(pygame.Rect(0,0,const.sector_size,t)) #стіна зверху
-        if w['bottom']: rects.append(pygame.Rect(0,const.sector_size-t,const.sector_size,t)) #стіна знизу
-        if w['left']:   rects.append(pygame.Rect(0,0,t,const.sector_size)) #стіна ліворуч
-        if w['right']:  rects.append(pygame.Rect(const.sector_size-t,0,t,const.sector_size)) #стіна праворуч
-        return rects #повертаємо список прямокутників
+        x, y = sector_pos
+        w = self.grid[x][y]['walls']
+        t = 5
+        rects = []
+        if w['top']:    rects.append(pygame.Rect(0,0,const.sector_size,t))
+        if w['bottom']: rects.append(pygame.Rect(0,const.sector_size-t,const.sector_size,t))
+        if w['left']:   rects.append(pygame.Rect(0,0,t,const.sector_size))
+        if w['right']:  rects.append(pygame.Rect(const.sector_size-t,0,t,const.sector_size))
+        return rects
 
     def get_tile_colliders(self, sector_pos):
-        #повертає список прямокутників, які представляють непрохідні тайли локального лабіринту для колізій
-        x, y = sector_pos #координати сектора
-        tiles = self.grid[x][y]['tiles'] #двовимірний масив тайлів сектора
-        rects = [] #список прямокутників
-        tw = const.sector_size // len(tiles[0]) #ширина одного тайла у пікселях
-        th = const.sector_size // len(tiles) #висота одного тайла у пікселях
-        for ry, row in enumerate(tiles): #перебираємо всі рядки
-            for cx, val in enumerate(row): #перебираємо всі тайли у рядку
-                if val == 1: #якщо тайл — стіна
-                    rects.append(pygame.Rect(cx*tw, ry*th, tw, th)) #додаємо прямокутник для колізії
-        return rects #повертаємо список прямокутників
+        x, y = sector_pos
+        tiles = self.grid[x][y]['tiles']
+        rects = []
+        tw = const.sector_size // len(tiles[0])
+        th = const.sector_size // len(tiles)
+        for ry, row in enumerate(tiles):
+            for cx, val in enumerate(row):
+                if val == 1:
+                    rects.append(pygame.Rect(cx*tw, ry*th, tw, th))
+        return rects
 
     def get_chests(self, sector_pos):
-        #повертає список сундуків у поточному секторі; sector_pos — координати сектора
         return self.grid[sector_pos[0]][sector_pos[1]]['chests']
 
     def tre_collect_chest(self, sector_pos, player_rect):
-        #перевіряє, чи гравець торкнувся сундука у секторі; якщо так — видаляє цей сундук
-        chs = self.grid[sector_pos[0]][sector_pos[1]]['chests'] #список сундуків у секторі
-        for c in chs: #перебираємо всі сундуки
-            if c.colliderect(player_rect): #перевіряємо зіткнення з гравцем
-                chs.remove(c) #видаляємо сундук зі списку
-                break #завершуємо цикл після першого знайденого
+        x, y = sector_pos
+        chs = self.grid[x][y]['chests']
+        removed = 0
+        remaining = []
+        for c in chs:
+            rect = c['rect'] if isinstance(c, dict) and 'rect' in c else c
+            if player_rect.colliderect(rect):
+                removed += 1
+            else:
+                remaining.append(c)
+        if removed:
+            self.grid[x][y]['chests'] = remaining
+        return removed
 
     def draw_sector(self, screen, sector_pos):
-        #відповідає за рендеринг поточного сектора: малює фон, глобальні та локальні стіни, сундуки і фінальний скарб
-        x, y = sector_pos #координати сектора
-        sector = self.grid[x][y] #дані сектора
+        x, y = sector_pos
+        sector = self.grid[x][y]
 
         biome_name = sector["biome"]
-        parameters = BIOMES[biome_name] #отримуємо параметри біома з констант
-        background_path = parameters["background"] #шлях до зображення фону біома
-        wall_color = parameters["wall_color"] #колір стін біома
+        parameters = BIOMES[biome_name]
+        background_path = parameters["background"]
+        wall_color = parameters["wall_color"]
 
+        bg = pygame.image.load(background_path).convert()
+        bg = pygame.transform.scale(bg, (const.sector_size, const.sector_size))
+        screen.blit(bg, (0,0))
 
-        #фон
-        bg = pygame.image.load(background_path).convert() #завантажуємо зображення фону
-        bg = pygame.transform.scale(bg,(const.sector_size,const.sector_size)) #масштабуємо фон до розміру сектора
-        screen.blit(bg,(0,0)) #малюємо фон на екрані
-        
-        t = 5; cell = const.sector_size//9 #t — товщина стіни, cell — ширина одного тайла
-        
-        for direction, off in sector['entry_points']: #перебираємо всі точки входу у сектор
-            start = off*cell; end = (off+1)*cell #обчислюємо координати отвору
-            
-            if direction == 'top': #якщо отвір зверху
-                pygame.draw.rect(screen, wall_color, (0,0,start,t)) #малюємо ліву частину стіни
-                pygame.draw.rect(screen, wall_color, (end,0,const.sector_size-end,t)) #малюємо праву частину стіни
-            
-            elif direction == 'bottom': #якщо отвір знизу
+        t = 5; cell = const.sector_size // const.tile_grid_size
+        for direction, off in sector['entry_points']:
+            start = off*cell; end = (off+1)*cell
+            if direction == 'top':
+                pygame.draw.rect(screen, wall_color, (0,0,start,t))
+                pygame.draw.rect(screen, wall_color, (end,0,const.sector_size-end,t))
+            elif direction == 'bottom':
                 pygame.draw.rect(screen, wall_color, (0,const.sector_size-t,start,t))
                 pygame.draw.rect(screen, wall_color, (end,const.sector_size-t,const.sector_size-end,t))
-            
-            elif direction == 'left': #якщо отвір ліворуч
+            elif direction == 'left':
                 pygame.draw.rect(screen, wall_color, (0,0,t,start))
                 pygame.draw.rect(screen, wall_color, (0,end,t,const.sector_size-end))
-            
-            elif direction == 'right': #якщо отвір праворуч
+            elif direction == 'right':
                 pygame.draw.rect(screen, wall_color, (const.sector_size-t,0,t,start))
                 pygame.draw.rect(screen, wall_color, (const.sector_size-t,end,t,const.sector_size-end))
-        
-        tw = const.sector_size // const.tile_grid_size #tw і th — розміри тайла у пікселях
+
+        tw = const.sector_size // const.tile_grid_size
         th = tw
-        
-        for ry, row in enumerate(sector['tiles']): #перебираємо всі рядки локального лабіринту
-            for cx, val in enumerate(row): #перебираємо всі тайли у рядку
-                if val == 1: #якщо тайл — стіна
-                    pygame.draw.rect(screen, wall_color, (cx*tw, ry*th, tw, th)) #малюємо стіну
-        
-        for chest in sector['chests']: #перебираємо всі сундуки у секторі
-            pygame.draw.rect(screen, colors["YELLOW"], chest) #малюємо сундук
-        
-        if (x,y) == self.treasure_pos: #якщо сектор містить фінальний скарб
-            pygame.draw.circle(screen, colors["GREEN"], (const.sector_size//2,const.sector_size//2),20) #малюємо скарб у центрі сектора
+        for ry, row in enumerate(sector['tiles']):
+            for cx, val in enumerate(row):
+                if val == 1:
+                    pygame.draw.rect(screen, wall_color, (cx*tw, ry*th, tw, th))
+
+        # малюємо квіти (dict{'rect','image'} або Rect)
+        for chest in sector['chests']:
+            if isinstance(chest, dict) and 'image' in chest and 'rect' in chest:
+                screen.blit(chest['image'], chest['rect'])
+            else:
+                rect = chest['rect'] if isinstance(chest, dict) and 'rect' in chest else chest
+                if isinstance(rect, pygame.Rect):
+                    pygame.draw.rect(screen, colors["YELLOW"], rect)
+
+        if (x,y) == self.treasure_pos:
+            pygame.draw.circle(screen, colors["GREEN"], (const.sector_size//2,const.sector_size//2), 20)
