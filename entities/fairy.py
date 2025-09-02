@@ -1,5 +1,6 @@
 import pygame
 import os
+import math
 
 class Fairy(pygame.sprite.Sprite):
     def __init__(self, folder, player):
@@ -20,12 +21,16 @@ class Fairy(pygame.sprite.Sprite):
         self.offset = (-90, -60)  # відносно гравця (можна підкрутити)
 
         #параметри літання
+        self.float_time = 0.0
+        self.float_amplitude = 6
+        self.float_speed = 3.0
 
     def activate(self, duration):
         """Запускає фею на duration секунд"""
         self.active = True
         self.timer = duration
         self.frame_index = 0
+        self.float_time = 0.0
 
     def update(self, dt):
         if not self.active:
@@ -41,12 +46,18 @@ class Fairy(pygame.sprite.Sprite):
         self.frame_index += self.frame_speed
         if self.frame_index >= len(self.frames):
             self.frame_index = 0
+        
+        self.float_time += dt * self.float_speed
 
     def draw(self, screen):
         if not self.active:
             return
-        print("Fairy drawing frame:", int(self.frame_index))  # ← дебаг
         img = self.frames[int(self.frame_index)]
+
+        # обчислення вертикального відхилення
+        float_offset = math.sin(self.float_time) * self.float_amplitude
+
         x = self.player.rect.centerx + self.offset[0]
-        y = self.player.rect.centery + self.offset[1]
+        y = self.player.rect.centery + self.offset[1] + float_offset
+
         screen.blit(img, (x, y))
