@@ -1,63 +1,94 @@
+#entities/fairy.py#
+
 import pygame
-import os
 import math
+import os
 
-class Fairy(pygame.sprite.Sprite):
-    def __init__(self, folder, player):
-        super().__init__()
-        self.frames = []
-        for i in range(1, 8):  # fairy_1.png ... fairy_7.png
-            path = os.path.join(folder, f"fairy_{i}.png")
-            img = pygame.image.load(path).convert_alpha()
-            self.frames.append(img)
-
+class Fairy:
+    def __init__(self, folder_path, player):
+        #гравець до якого прив’язана фея
         self.player = player
+        #завантажуємо кадри анімації
+        self.frames = []
+        for i in range(1, 7):
+            path = os.path.join(folder_path, f"fairy_{i}.png")
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                self.frames.append(img)
+        #параметри анімації
+        self.index = 0
+        self.timer = 0.0
+        self.anim_speed = 0.12
+        #параметри активності
         self.active = False
-        self.timer = 0
-        self.frame_index = 0
-        self.frame_speed = 0.12  # швидкість анімації
-
-        # позиція феї
-        self.offset = (-90, -60)  # відносно гравця (можна підкрутити)
-
-        #параметри літання
-        self.float_time = 0.0
-        self.float_amplitude = 6
-        self.float_speed = 3.0
+        self.duration = 0.0
+        self.elapsed = 0.0
+        #вертикальний рух для пурхання
+        self.float_phase = 0.0
+        #зміщення відносно гравця
+        self.offset_x = 70
+        self.offset_y = 40
+        #напрямок сторони (для X та Y окремо)
+        self.side_x = 1
+        self.side_y = -1
+        #збережена попередня позиція гравця
+        self.prev_x, self.prev_y = self.player.rect.center
 
     def activate(self, duration):
-        """Запускає фею на duration секунд"""
+        #активуємо фею на певний час
         self.active = True
-        self.timer = duration
-        self.frame_index = 0
-        self.float_time = 0.0
+        self.duration = duration
+        self.elapsed = 0.0
 
     def update(self, dt):
+        #оновлюємо анімацію та час життя
         if not self.active:
             return
 
-        # таймер часу життя
-        self.timer -= dt
-        if self.timer <= 0:
+        #рахуємо час активності
+        self.elapsed += dt
+        if self.elapsed >= self.duration:
             self.active = False
             return
 
-        # оновлення кадрів анімації
-        self.frame_index += self.frame_speed
-        if self.frame_index >= len(self.frames):
-            self.frame_index = 0
-        
-        self.float_time += dt * self.float_speed
+        #анімація крил
+        self.timer += dt
+        if self.timer >= self.anim_speed:
+            self.timer = 0.0
+            self.index = (self.index+1) % len(self.frames)
+
+        #ефект плавання вгору-вниз
+        self.float_phase += dt*2.5
+
+        #визначаємо напрямок руху гравця
+        cx, cy = self.player.rect.center
+        dx = cx - self.prev_x
+        dy = cy - self.prev_y
+
+        if abs(dx) > abs(dy):
+            #рух більше по горизонталі
+            if dx > 0:
+                self.side_x = -1  #фея зліва
+            elif dx < 0:
+                self.side_x = 1   #фея справа
+        elif abs(dy) > 0:
+            #рух більше по вертикалі
+            if dy > 0:
+                self.side_y = -1  #фея зверху
+            elif dy < 0:
+                self.side_y = 1   #фея знизу
+
+        #оновлюємо попередню позицію
+        self.prev_x, self.prev_y = cx, cy
 
     def draw(self, screen):
-        if not self.active:
+        #малюємо фею біля гравця якщо вона активна
+        if not self.active or not self.frames:
             return
-        img = self.frames[int(self.frame_index)]
+        img = self.frames[self.index]
+        px, py = self.player.rect.center
+        px += self.side_x * self.offset_x
+        py += self.side_y * self.offset_y + int(math.sin(self.float_phase)*6)
+        screen.blit(img, img.get_rect(center=(px,py)))
 
-        # обчислення вертикального відхилення
-        float_offset = math.sin(self.float_time) * self.float_amplitude
 
-        x = self.player.rect.centerx + self.offset[0]
-        y = self.player.rect.centery + self.offset[1] + float_offset
-
-        screen.blit(img, (x, y))

@@ -1,52 +1,52 @@
-#map/map_controller.py#
 import os
 import glob
 import pygame
 import random
-import settings.constants as const  # імпортуємо константи
-from ui.colors import colors
-from settings.constants import BIOMES
+import settings.constants as const  #імпортуємо глобальні константи з settings
+from ui.colors import colors        #кольори для малювання
+from settings.constants import BIOMES  #словар з даними про біоми
 
 class MapController:
     def __init__(self):
-        # створюємо grid
+        #створюємо двовимірний масив grid який містить дані про кожен сектор карти
         self.grid = [
             [
                 {
-                    'visited': False,
-                    'walls': {'top': True, 'bottom': True, 'left': True, 'right': True},
-                    'tiles': self.generate_tile_maze(),
-                    'chests': [],
-                    'entry_points': []
+                    'visited': False,  #чи вже відвідано цей сектор при генерації лабіринту
+                    'walls': {'top': True, 'bottom': True, 'left': True, 'right': True}, #зовнішні стіни сектора
+                    'tiles': self.generate_tile_maze(),  #локальний лабіринт усередині сектора
+                    'chests': [],  #квіти або сундуки у секторі
+                    'entry_points': []  #точки входів/виходів у сектор
                 }
                 for _ in range(const.map_height)
             ]
             for _ in range(const.map_width)
         ]
 
+        #позиція головного скарбу на карті
         self.treasure_pos = (
             random.randrange(const.map_width),
             random.randrange(const.map_height)
         )
 
-        # карта біомів
+        #створюємо карту біомів (спочатку пуста)
         self.biome_map = [[None]*const.map_height for _ in range(const.map_width)]
-        self.assign_biomes()  # <-- тут гарантовано є метод assign_biomes
+        self.assign_biomes()  #призначаємо біоми
 
-        # завантаження картинок квітів (якщо є)
+        #завантажуємо картинки квітів
         self.flower_images = []
         self.ui_flower_frames = []
         self.load_flower_images()
 
-        # переносимо назву біома в дані кожного сектора
+        #копіюємо інформацію про біом у кожен сектор
         for x in range(const.map_width):
             for y in range(const.map_height):
                 self.grid[x][y]['biome'] = self.biome_map[x][y]
 
-        # генеруємо глобальний лабіринт
+        #створюємо глобальний лабіринт між секторами
         self.generate_full_maze()
 
-        # вирізаємо входи і розміщуємо "сундуки"/квітки
+        #створюємо входи і розміщуємо квіти у кожному секторі
         for x in range(const.map_width):
             for y in range(const.map_height):
                 entries = []
@@ -58,61 +58,48 @@ class MapController:
                 self.grid[x][y]['entry_points'] = entries
                 self.grid[x][y]['chests'] = self.place_chests(self.grid[x][y]['tiles'])
 
-
-    # ----------------- завантаження квітів -----------------
     def load_flower_images(self):
-            # Зміна: шукаємо ПЕРШОЧЕРГОВО картинки у папці realistic_flowers (усі файли flower_*.png).
-            # Якщо там нічого — fallback на загальний пошук у assets/flowers/**/*.(png|jpg|gif)
-            specific_dir = os.path.join("assets", "flowers", "realistic_flowers")
-            paths = []
+        #шукаємо картинки квітів, пріоритет у assets/flowers/realistic_flowers
+        specific_dir = os.path.join("assets", "flowers", "realistic_flowers")
+        paths = []
+        if os.path.isdir(specific_dir):
+            paths = sorted(glob.glob(os.path.join(specific_dir, "flower_*.png")))
+        #якщо нема у realistic_flowers, шукаємо будь-де у assets/flowers
+        if not paths:
+            base = "assets/flowers"
+            exts = ("*.png", "*.jpg", "*.jpeg", "*.gif")
+            if os.path.isdir(base):
+                for root, dirs, files in os.walk(base):
+                    for ext in exts:
+                        paths.extend(glob.glob(os.path.join(root, ext)))
+            paths = sorted(set(paths))
+        if not paths:
+            self.flower_images = []
+            self.ui_flower_frames = []
+            return
+        #визначаємо розміри для секторів та для ui
+        tile_px = const.tile_px if const.tile_px else (const.sector_size // const.tile_grid_size if const.sector_size else 32)
+        flower_display_size = max(12, int(tile_px * 0.6))
+        ui_size = max(12, int(tile_px * 0.35))
+        loaded = []
+        for p in paths:
+            try:
+                img = pygame.image.load(p).convert_alpha()
+            except Exception:
+                continue
+            img_tile = pygame.transform.smoothscale(img, (flower_display_size, flower_display_size))
+            loaded.append(img_tile)
+        self.flower_images = loaded
+        #створюємо ui-фрейми (до 5 картинок)
+        ui_frames = []
+        if loaded:
+            for i in range(5):
+                src = loaded[i % len(loaded)]
+                ui_frames.append(pygame.transform.smoothscale(src, (ui_size, ui_size)))
+        self.ui_flower_frames = ui_frames
 
-            # шукаємо всі png у specific_dir
-            if os.path.isdir(specific_dir):
-                paths = sorted(glob.glob(os.path.join(specific_dir, "flower_*.png")))
-
-            # fallback — загальний пошук по всьому assets/flowers
-            if not paths:
-                base = "assets/flowers"
-                exts = ("*.png", "*.jpg", "*.jpeg", "*.gif")
-                if os.path.isdir(base):
-                    for root, dirs, files in os.walk(base):
-                        for ext in exts:
-                            paths.extend(glob.glob(os.path.join(root, ext)))
-                paths = sorted(set(paths))
-
-            if not paths:
-                self.flower_images = []
-                self.ui_flower_frames = []
-                return
-
-            # визначаємо розмір для відображення у секторі та для UI-іконок
-            tile_px = const.tile_px if const.tile_px else (const.sector_size // const.tile_grid_size if const.sector_size else 32)
-            flower_display_size = max(12, int(tile_px * 0.6))
-            ui_size = max(12, int(tile_px * 0.35))
-
-            loaded = []
-            for p in paths:
-                try:
-                    img = pygame.image.load(p).convert_alpha()
-                except Exception:
-                    continue
-                img_tile = pygame.transform.smoothscale(img, (flower_display_size, flower_display_size))
-                loaded.append(img_tile)
-
-            self.flower_images = loaded
-
-            # UI frames: беремо до 5 фреймів — якщо менше картинок, повторюємо їх
-            ui_frames = []
-            if loaded:
-                for i in range(5):
-                    src = loaded[i % len(loaded)]
-                    ui_frames.append(pygame.transform.smoothscale(src, (ui_size, ui_size)))
-            self.ui_flower_frames = ui_frames
-
-
-
-    # ----------------- генерація локального лабіринту -----------------
     def generate_tile_maze(self):
+        #створює локальний лабіринт у секторі методом рекурсивного проходу
         w, h = 9, 9
         maze = [[1]*w for _ in range(h)]
         def carve(cx, cy):
@@ -128,6 +115,7 @@ class MapController:
         return maze
 
     def apply_entry_point(self, tiles, direction, off):
+        #створює прохід у локальному лабіринті
         size = len(tiles)
         if direction == 'top':
             tiles[0][off] = 0
@@ -142,32 +130,30 @@ class MapController:
             tiles[off][size-1] = 0
             tiles[off][size-2] = 0
 
-    # ----------------- ASSIGN BIOMES (ВАЖЛИВО) -----------------
     def assign_biomes(self):
+        #призначає випадкові біоми кожному сектору
         names = list(BIOMES.keys())
         coordinates = [(x, y) for x in range(const.map_width) for y in range(const.map_height)]
         random.shuffle(coordinates)
-        # присвоїти по одному сектору кожного біома
         for name, coord in zip(names, coordinates):
             x, y = coord
             self.biome_map[x][y] = name
-        # заповнити решту
         for x in range(const.map_width):
             for y in range(const.map_height):
                 if self.biome_map[x][y] is None:
                     self.biome_map[x][y] = random.choice(names)
 
-    # ----------------- інші методи -----------------
     def get_biome(self, sector_pos):
+        #повертає назву біома за координатою сектора
         x, y = sector_pos
         return self.biome_map[x][y]
 
     def place_chests(self, tiles):
+        #розміщує квіти у секторі на випадкових вільних клітинках
         w = len(tiles[0])
         h = len(tiles)
         tw = const.sector_size // w
         th = const.sector_size // h
-
         free_tiles = [
             (cx, ry)
             for ry, row in enumerate(tiles)
@@ -177,7 +163,6 @@ class MapController:
         chests = []
         if not free_tiles or not self.flower_images:
             return []
-
         for _ in range(const.max_chests_per_sector):
             if not free_tiles:
                 break
@@ -192,6 +177,7 @@ class MapController:
         return chests
 
     def generate_full_maze(self):
+        #створює глобальний лабіринт між секторами за алгоритмом dfs
         stack = []
         total = const.map_width * const.map_height
         visited = 1
@@ -212,6 +198,7 @@ class MapController:
         self.add_cycles(const.global_cycle_count)
 
     def get_safe_transition_point(self, sector_pos):
+        #повертає координати безпечної точки усередині сектора
         tiles = self.grid[sector_pos[0]][sector_pos[1]]['tiles']
         tile_w = const.sector_size // const.tile_grid_size
         for y in range(const.tile_grid_size):
@@ -221,6 +208,7 @@ class MapController:
                             y * tile_w + tile_w // 2)
 
     def add_cycles(self, count):
+        #додає додаткові проходи у глобальний лабіринт для різноманітності
         attempts = 0
         while attempts < count:
             x = random.randint(0, const.map_width - 2)
@@ -240,6 +228,7 @@ class MapController:
             attempts += 1
 
     def get_unvisited_neighbors(self, cell):
+        #повертає список сусідніх секторів які ще не були відвідані
         x, y = cell
         nbrs = []
         if x>0 and not self.grid[x-1][y]['visited']: nbrs.append((x-1,y))
@@ -249,6 +238,7 @@ class MapController:
         return nbrs
 
     def remove_wall(self, cur, nxt):
+        #знімає стіну між двома сусідніми секторами
         cx, cy = cur
         nx, ny = nxt
         wcur = self.grid[cx][cy]['walls']
@@ -263,6 +253,7 @@ class MapController:
             wcur['top']   = False; wnxt['bottom']= False
 
     def get_sector_walls(self, sector_pos):
+        #повертає список прямокутників стін сектора
         x, y = sector_pos
         w = self.grid[x][y]['walls']
         t = 5
@@ -274,6 +265,7 @@ class MapController:
         return rects
 
     def get_tile_colliders(self, sector_pos):
+        #повертає список прямокутників стін у локальному лабіринті
         x, y = sector_pos
         tiles = self.grid[x][y]['tiles']
         rects = []
@@ -286,9 +278,11 @@ class MapController:
         return rects
 
     def get_chests(self, sector_pos):
+        #повертає список квітів у секторі
         return self.grid[sector_pos[0]][sector_pos[1]]['chests']
 
     def tre_collect_chest(self, sector_pos, player_rect):
+        #перевіряє чи гравець зібрав квіти, повертає кількість зібраних
         x, y = sector_pos
         chs = self.grid[x][y]['chests']
         removed = 0
@@ -304,18 +298,18 @@ class MapController:
         return removed
 
     def draw_sector(self, screen, sector_pos):
+        #малює сектор на екрані
         x, y = sector_pos
         sector = self.grid[x][y]
-
         biome_name = sector["biome"]
         parameters = BIOMES[biome_name]
         background_path = parameters["background"]
         wall_color = parameters["wall_color"]
-
+        #фон
         bg = pygame.image.load(background_path).convert()
         bg = pygame.transform.scale(bg, (const.sector_size, const.sector_size))
         screen.blit(bg, (0,0))
-
+        #стіни входів
         t = 5; cell = const.sector_size // const.tile_grid_size
         for direction, off in sector['entry_points']:
             start = off*cell; end = (off+1)*cell
@@ -331,15 +325,14 @@ class MapController:
             elif direction == 'right':
                 pygame.draw.rect(screen, wall_color, (const.sector_size-t,0,t,start))
                 pygame.draw.rect(screen, wall_color, (const.sector_size-t,end,t,const.sector_size-end))
-
+        #локальні стіни тайлів
         tw = const.sector_size // const.tile_grid_size
         th = tw
         for ry, row in enumerate(sector['tiles']):
             for cx, val in enumerate(row):
                 if val == 1:
                     pygame.draw.rect(screen, wall_color, (cx*tw, ry*th, tw, th))
-
-        # малюємо квіти (dict{'rect','image'} або Rect)
+        #малюємо квіти
         for chest in sector['chests']:
             if isinstance(chest, dict) and 'image' in chest and 'rect' in chest:
                 screen.blit(chest['image'], chest['rect'])
@@ -347,6 +340,6 @@ class MapController:
                 rect = chest['rect'] if isinstance(chest, dict) and 'rect' in chest else chest
                 if isinstance(rect, pygame.Rect):
                     pygame.draw.rect(screen, colors["YELLOW"], rect)
-
+        #малюємо головний скарб
         if (x,y) == self.treasure_pos:
             pygame.draw.circle(screen, colors["GREEN"], (const.sector_size//2,const.sector_size//2), 20)

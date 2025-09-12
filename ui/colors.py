@@ -9,5 +9,7 @@ colors = {
     "BLUE": (0, 100, 255),
     "WHITE": (255, 255, 255),
     "DEEP_PINK": (109, 18, 63),
-    "ACID_GREEN": (162, 188, 6)
+    "ACID_GREEN": (162, 188, 6),
+    "LAVENDER": (154, 155, 199),
+    "SOFT_GREEN": (125, 187, 108)
 }

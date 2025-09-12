@@ -1,3 +1,5 @@
+#core/game_state.py#
+
 class GameState:
     def __init__(self):
         self.running = True      #чи працює гра
