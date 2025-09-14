@@ -5,7 +5,7 @@ import settings.constants as const
 import time
 
 class Player(pygame.sprite.Sprite):
-    def __init__(self, start_sector=(0,0), game=None):
+    def __init__(self, start_sector=(0,0), game=None, pos=None):
         super().__init__()
         self.game = game
         self.sector_x, self.sector_y = start_sector
@@ -17,28 +17,47 @@ class Player(pygame.sprite.Sprite):
         self.direction = "down"
         self.invincible = False
         self.invincibility_timer = 0
-        self.noclip = False  #режим без колізій
+        self.noclip = False
         
-        #шлях до анімацій гравця
+        # Додаємо акумулятори для точного руху
+        self.x_accumulator = 0.0
+        self.y_accumulator = 0.0
+        
+        # Зменшуємо розмір гравця для кращого проходження через двері
+        self.hitbox_width = 50
+        self.hitbox_height = 50
+        
         self.animation_manager = AnimationManager("animations/goblin")
         self.image = self.animation_manager.get_image()
         self.rect = self.image.get_rect()
-        self.rect.center = (const.sector_size // 2, const.sector_size // 2)
-        self.last_update = pygame.time.get_ticks()
-        self.frame_rate = 100  #час між кадрами анімації
-        self.state = 'idle'  #стан гравця для анімації
         
-        #інвентар зіллів
+        # Використовуємо передану позицію або центр сектора
+        if pos:
+            self.rect.center = pos
+            self.x, self.y = pos
+        else:
+            center_x = const.sector_size // 2
+            center_y = const.sector_size // 2
+            self.rect.center = (center_x, center_y)
+            self.x, self.y = center_x, center_y
+            
+        # Створюємо окремий хітбокс для колізій
+        self.hitbox = pygame.Rect(0, 0, self.hitbox_width, self.hitbox_height)
+        self.hitbox.center = self.rect.center
+            
+        self.last_update = pygame.time.get_ticks()
+        self.frame_rate = 100
+        self.state = 'idle'
+        
         self.potion_inventory = PotionInventory(self, self.game)
 
     def update(self, dt, walls):
-        #зберігаємо стару позицію для відкату при колізії
-        old_x, old_y = self.rect.x, self.rect.y
+        # Зберігаємо стару позицію для відкату при колізії
+        old_x, old_y = self.x, self.y
         
         keys = pygame.key.get_pressed()
         dx, dy = 0, 0
         
-        #прапор руху
         moving = False
         
         if keys[pygame.K_w]:
@@ -58,44 +77,59 @@ class Player(pygame.sprite.Sprite):
             self.direction = "right"
             moving = True
             
-        #визначаємо стан (рух чи спокій)
         self.state = 'walk' if moving else 'idle'
         
-        #якщо режим noclip увімкнений, рухаємося без колізій
+        # Додаємо рух до акумуляторів
+        self.x_accumulator += dx
+        self.y_accumulator += dy
+        
+        # Отримуємо цілу частину руху
+        move_x = int(self.x_accumulator)
+        move_y = int(self.y_accumulator)
+        
+        # Зберігаємо дробову частину для наступного кадру
+        self.x_accumulator -= move_x
+        self.y_accumulator -= move_y
+        
         if self.noclip:
-            self.rect.x += dx
-            self.rect.y += dy
+            self.x += move_x
+            self.y += move_y
         else:
-            #рухаємося по осі X і перевіряємо колізії
-            self.rect.x += dx
-            for wall in walls:
-                if self.rect.colliderect(wall):
-                    if dx > 0:  #рух праворуч
-                        self.rect.right = wall.left
-                    elif dx < 0:  #рух ліворуч
-                        self.rect.left = wall.right
-                    break
-                    
-            #рухаємося по осі Y і перевіряємо колізії
-            self.rect.y += dy
-            for wall in walls:
-                if self.rect.colliderect(wall):
-                    if dy > 0:  #рух униз
-                        self.rect.bottom = wall.top
-                    elif dy < 0:  #рух вгору
-                        self.rect.top = wall.bottom
-                    break
-                    
-        #оновлюємо анімацію
+            # Рухаємо спочатку по X
+            self.x += move_x
+            self.hitbox.center = (int(self.x), int(self.y))
+            collision = self.check_collisions(walls)
+            if collision:
+                self.x = old_x
+                self.x_accumulator = 0.0  # Скидаємо акумулятор при колізії
+                
+            # Потім по Y
+            self.y += move_y
+            self.hitbox.center = (int(self.x), int(self.y))
+            collision = self.check_collisions(walls)
+            if collision:
+                self.y = old_y
+                self.y_accumulator = 0.0  # Скидаємо акумулятор при колізії
+                
+        # Оновлюємо позицію rect на основі float координат
+        self.rect.center = (int(self.x), int(self.y))
+        self.hitbox.center = self.rect.center
+            
+        # Оновлюємо анімацію
         self.animation_manager.update(dt, self.state, self.direction)
         self.image = self.animation_manager.get_image()
             
-        #оновлюємо невразливість
         if self.invincible:
             self.invincibility_timer -= dt
             if self.invincibility_timer <= 0:
                 self.invincible = False
                 
+    def check_collisions(self, walls):
+        for wall in walls:
+            if self.hitbox.colliderect(wall):
+                return True
+        return False
+
     def take_damage(self, amount):
         #перевіряємо чи не є гравець невразливим (через зілля)
         if self.potion_inventory.invulnerable:

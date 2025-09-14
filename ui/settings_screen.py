@@ -30,7 +30,7 @@ def show_admin_menu(screen, player):
     #кнопки адмінського меню
     buttons = [
         {"rect": pygame.Rect(menu_x + 50, menu_y + 80, 400, 50), "text": "Toggle No-Clip", "action": "noclip"},
-        {"rect": pygame.Rect(menu_x + 50, menu_y + 150, 400, 50), "text": "Set Speed to 10", "action": "speed"},
+        {"rect": pygame.Rect(menu_x + 50, menu_y + 150, 400, 50), "text": "Set Speed to x3", "action": "speed"},
         {"rect": pygame.Rect(menu_x + 50, menu_y + 220, 400, 50), "text": "Add 100 Flowers", "action": "add_flowers"},
         {"rect": pygame.Rect(menu_x + 50, menu_y + 290, 400, 50), "text": "Add All Potions", "action": "add_potions"},
         {"rect": pygame.Rect(menu_x + 50, menu_y + 360, 400, 50), "text": "Close Admin Menu", "action": "close"}
@@ -52,8 +52,8 @@ def show_admin_menu(screen, player):
                         if button["action"] == "noclip":
                             player.noclip = not player.noclip
                         elif button["action"] == "speed":
-                            player.speed = 10
-                            player.base_speed = 10
+                            player.speed = 3 * const.PLAYER_SPEED
+                            player.base_speed = 3 * const.PLAYER_SPEED
                         elif button["action"] == "add_flowers":
                             player.flowers += 100
                         elif button["action"] == "add_potions":

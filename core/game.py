@@ -1,3 +1,5 @@
+#core/game.py#
+
 import pygame
 import settings.constants as const
 from map.map_controller import MapController
@@ -42,7 +44,8 @@ class Game:
             start_sector = (0, 0)
 
         #створюємо гравця у стартовому секторі
-        self.player = Player(start_sector=start_sector, game=self)
+        safe_pos = self.find_safe_position(start_sector)
+        self.player = Player(start_sector=start_sector, game=self, pos = safe_pos)
         #створюємо фею, яка прив'язана до гравця
         self.fairy = Fairy("assets/entities/green blob fairy", self.player)
         self.camera = Camera()
@@ -74,6 +77,32 @@ class Game:
         
         #завантажуємо тестові квести
         self.setup_test_quests()
+
+    def find_safe_position(self, sector):
+        walls = self.map_controller.get_sector_walls(sector) + \
+                self.map_controller.get_tile_colliders(sector)
+        
+        # Використовуємо розміри хітбоксу гравця
+        player_width = 30
+        player_height = 30
+        
+        for _ in range(100):
+            x = random.randint(50, const.sector_size - 50)
+            y = random.randint(50, const.sector_size - 50)
+            test_rect = pygame.Rect(x - player_width//2, y - player_height//2, 
+                                  player_width, player_height)
+            
+            collision = False
+            for wall in walls:
+                if test_rect.colliderect(wall):
+                    collision = True
+                    break
+                    
+            if not collision:
+                return (x, y)
+        
+        return (const.sector_size // 2, const.sector_size // 2)
+
 
     def spawn_npcs(self):
         #спавнимо NPC у випадкових місцях
@@ -183,29 +212,29 @@ class Game:
                 tile_walls = self.map_controller.get_tile_colliders((sx, sy))
                 walls = global_walls + tile_walls
 
-                #оновлення гравця і феї
+                # Оновлення гравця і феї
                 self.player.update(dt, walls)
                 self.fairy.update(dt)
 
-                #перевірка переходів між секторами
+                # Перевірка переходів між секторами
                 new_sector = None
                 sx, sy = self.player.get_sector()
-                if self.player.rect.right < 0 and sx > 0:
+                # Використовуємо hitbox замість rect для перевірки переходів
+                if self.player.hitbox.right < 0 and sx > 0:
                     new_sector = (sx - 1, sy)
-                elif self.player.rect.left > const.sector_size and sx < const.map_width - 1:
+                elif self.player.hitbox.left > const.sector_size and sx < const.map_width - 1:
                     new_sector = (sx + 1, sy)
-                elif self.player.rect.bottom < 0 and sy > 0:
+                elif self.player.hitbox.bottom < 0 and sy > 0:
                     new_sector = (sx, sy - 1)
-                elif self.player.rect.top > const.sector_size and sy < const.map_height - 1:
+                elif self.player.hitbox.top > const.sector_size and sy < const.map_height - 1:
                     new_sector = (sx, sy + 1)
 
                 if new_sector is not None:
                     self.player.set_sector(new_sector[0], new_sector[1])
-                    #шукаємо безпечну позицію в новому секторі
                     safe_pos = self.find_safe_position(new_sector)
+                    # Оновлюємо обидва rect і hitbox
                     self.player.rect.center = safe_pos
-                    walls = self.map_controller.get_sector_walls(new_sector) + \
-                            self.map_controller.get_tile_colliders(new_sector)
+                    self.player.hitbox.center = safe_pos
 
                 #збір квітів 
                 collected = self.map_controller.tre_collect_chest(self.player.get_sector(), self.player.rect)
@@ -293,7 +322,7 @@ class Game:
         #малюємо шкалу здоров'я
         bar_width = 200
         bar_height = 20
-        x = 10
+        x = 680
         y = const.window_height - bar_height - 10
         
         #фон

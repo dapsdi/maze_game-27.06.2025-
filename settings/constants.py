@@ -1,3 +1,5 @@
+#setting/constants.py#
+
 import pygame
 
 # основні налаштування
