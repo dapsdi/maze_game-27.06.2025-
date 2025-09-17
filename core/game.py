@@ -54,7 +54,8 @@ class Game:
         self.clock = pygame.time.Clock()
 
         # створюємо один верстак на карті
-        self.workbench = Workbench((300, 300))
+        workbench_pos = self.find_workbench_position(start_sector)
+        self.workbench = Workbench(workbench_pos)
 
         self.save_system = SaveLoadSystem()
         self.quest_manager = QuestManager()
@@ -79,6 +80,63 @@ class Game:
         
         # завантажуємо тестові квести
         self.setup_test_quests()
+
+    def find_workbench_position(self, sector):
+        """Знаходить позицію для верстака біля проходу в секторі"""
+        walls = self.map_controller.get_sector_walls(sector) + \
+                self.map_controller.get_tile_colliders(sector)
+        
+        # Отримуємо точки входу/виходу для сектора
+        entry_points = self.map_controller.grid[sector[0]][sector[1]]['entry_points']
+        
+        if not entry_points:
+            # Якщо немає проходів, повертаємо центр
+            return (const.sector_size // 2, const.sector_size // 2)
+        
+        # Вибираємо випадковий прохід
+        direction, offset = random.choice(entry_points)
+        cell_size = const.sector_size // const.tile_grid_size
+        
+        # Визначаємо координати біля проходу
+        if direction == 'top':
+            x = offset * cell_size + cell_size // 2
+            y = cell_size * 2  # трохи всередині від верхнього краю
+        elif direction == 'bottom':
+            x = offset * cell_size + cell_size // 2
+            y = const.sector_size - cell_size * 2
+        elif direction == 'left':
+            x = cell_size * 2
+            y = offset * cell_size + cell_size // 2
+        elif direction == 'right':
+            x = const.sector_size - cell_size * 2
+            y = offset * cell_size + cell_size // 2
+        
+        # Перевіряємо, чи ця позиція не всередині стіни
+        test_rect = pygame.Rect(x - 25, y - 25, 50, 50)
+        collision = False
+        for wall in walls:
+            if test_rect.colliderect(wall):
+                collision = True
+                break
+        
+        # Якщо є колізія, шукаємо поруч вільне місце
+        if collision:
+            for _ in range(20):  # 20 спроб знайти вільне місце
+                dx = random.randint(-cell_size * 2, cell_size * 2)
+                dy = random.randint(-cell_size * 2, cell_size * 2)
+                test_rect = pygame.Rect(x + dx - 25, y + dy - 25, 50, 50)
+                
+                collision = False
+                for wall in walls:
+                    if test_rect.colliderect(wall):
+                        collision = True
+                        break
+                
+                if not collision:
+                    return (x + dx, y + dy)
+        
+        # Якщо не знайшли вільне місце, повертаємо початкову позицію
+        return (x, y)
 
     def find_safe_position(self, sector):
         """Знаходить безпечну позицію у секторі без колізій зі стінами"""
@@ -253,6 +311,7 @@ class Game:
                 # Оновлення гравця і феї
                 self.player.update(dt, walls)
                 self.fairy.update(dt)
+                self.workbench.update(dt)
 
                 # Перевірка переходів між секторами з затримкою
                 if current_time - self.last_sector_change > self.sector_change_delay:

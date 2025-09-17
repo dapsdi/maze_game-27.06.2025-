@@ -113,11 +113,11 @@ POTION_TYPES = {
 
 # кольори зіллів
 POTION_COLORS = {
-    "SPEED": "#688EF0",        
-    "INVISIBILITY": "#DDD0FD", 
-    "TELEPORT": "#E96DBA",   
-    "INVULNERABILITY": "#DD6F3F",  # новий колір
-    "FLOWER_DETECTOR": "#3DCC16"  
+    "SPEED": "#688EF0",  #animations\potions\Small Bottle\BLUE\Sprites      
+    "INVISIBILITY": "#DDD0FD", #animations\potions\Glowing Potion\CYAN\Sprite
+    "TELEPORT": "#E96DBA",   #animations\potions\Big Vial\PURPLE\Sprites
+    "INVULNERABILITY": "#DD6F3F",  #animations\potions\Classic Jar\BLACK_GOLD\Sprites
+    "FLOWER_DETECTOR": "#3DCC16"  #animations\potions\Large Bottle\GREEN\Sprites
 }
 
 # тривалість ефектів зіллів (в мілісекундах)
